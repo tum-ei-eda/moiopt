@@ -136,3 +136,7 @@ class SchedOpt:
         for i, node in sorted(nodeOrder, key=lambda x: x[0]):
             sched.append(node)
         return sched
+
+
+def solve(G):
+    return SchedOpt().solve(G)

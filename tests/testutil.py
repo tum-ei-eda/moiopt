@@ -14,6 +14,8 @@ import tensorflow.keras.models as km
 import tensorflow.keras.layers as kl
 import networkx as nx
 
+import network
+
 # import tvm
 # from tvm import relay
 
@@ -49,6 +51,7 @@ eq = __tc.assertEqual
 neq = __tc.assertNotEqual
 inst = __tc.assertIsInstance
 raises = __tc.assertRaises
+almosteq = __tc.assertAlmostEqual
 
 
 def fail(msg):
@@ -84,6 +87,38 @@ def makeGraph(*args, weights={}):
             G.nodes[n]["outsize"] = weights.get(n, 100)
 
     return G
+
+
+def makeNetFromGraph(G):
+    net = network.Network()
+
+    bufid = 0
+    processedNodes = {}
+
+    def addBuf(node):
+        nonlocal bufid
+        if node not in processedNodes:
+            buf = net.addBuf("Buf" + str(bufid), G.nodes[node]["outsize"], False)
+            bufid += 1
+            processedNodes[node] = buf
+        return processedNodes[node]
+
+    nid = 0
+    for n in G.nodes:
+        inBufs = []
+        for inE in G.in_edges(n):
+            inBufs.append(addBuf(inE[0]))
+        if G.in_degree(n) != 0:
+            net.addOp("Op" + str(nid), inBufs, [addBuf(n)])
+            nid += 1
+
+    net.createGraph()
+    return net
+
+
+def makeNet(*args):
+    G = makeGraph(*args[:-1], weights=args[-1])
+    return makeNetFromGraph(G)
 
 
 def getSchedMemUsage(sched, G):
