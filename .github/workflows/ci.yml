@@ -5,12 +5,14 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: docker.io/tumeda/tvm_tumeda:latest
     steps:
     - uses: actions/checkout@v2
 
     - name: Requirements
       run: |
-        sudo apt install python3-virtualenv
+        sudo apt update
+        sudo apt install -y python3-virtualenv
         virtualenv -p python3 venv
         . venv/bin/activate
         pip install --upgrade pip

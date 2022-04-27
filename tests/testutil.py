@@ -15,9 +15,10 @@ import tensorflow.keras.layers as kl
 import networkx as nx
 
 import network
+import relay_util
 
-# import tvm
-# from tvm import relay
+import tvm
+from tvm import relay
 
 
 __anyFail = False
@@ -121,6 +122,50 @@ def makeNet(*args):
     return makeNetFromGraph(G)
 
 
+def buildTVM(mod, params, exportPath="/tmp/tvmtmp.so"):
+    target = tvm.target.Target("c --runtime=c -model=unknown --system-lib")
+    cfg = {"tir.disable_vectorize": True}
+    with tvm.transform.PassContext(opt_level=3, config=cfg):
+        c_mod = relay.build(mod, target, params=params)
+        c_mod.export_library(exportPath)
+        c_params = c_mod.get_params()
+    return c_mod, c_params
+
+
+lastInputData = None
+
+
+def runTVM(c_mod, c_params, modelInfo, inputData="random"):
+    global lastInputData
+
+    cpuctx = tvm.cpu()
+    rtmod = tvm.runtime.load_module(c_mod)
+    gmod = tvm.contrib.graph_executor.GraphModule(rtmod["default"](cpuctx))
+    gmod.set_input(**c_params)
+    currentInputData = {}
+    for t in modelInfo.inTensors:
+        if isinstance(inputData, np.ndarray):
+            data = inputData
+        elif isinstance(inputData, dict):
+            data = inputData[t.name]
+        elif inputData == "random":
+            data = np.random.uniform(-1, 1, size=t.shape).astype(t.ty)
+        elif inputData == "last":
+            assert lastInputData != None
+            data = lastInputData[t.name]
+        else:
+            raise RuntimeError("invalid input data")
+        gmod.set_input(t.name, data)
+        currentInputData[t.name] = data
+    lastInputData = currentInputData
+    gmod.run()
+    outTensors = []
+    for i, t in enumerate(modelInfo.outTensors):
+        out = gmod.get_output(i, tvm.nd.empty(t.shape, dtype=t.ty)).asnumpy()
+        outTensors.append(out)
+    return outTensors
+
+
 def getSchedMemUsage(sched, G):
     keepAlive = {}
     liveSize = 0
@@ -158,3 +203,124 @@ def verifySched(sched, G):
             + " "
             + "".join(minSched)
         )
+
+
+def getNum(s):
+    intStr = "".join(itertools.takewhile(str.isdigit, s))
+    if intStr == "":
+        return None
+    else:
+        return int(intStr)
+
+
+def getArg(s, name):
+    idx = s.find(name)
+    if idx == -1:
+        return None
+    num = getNum(s[idx + len(name) :])
+    if num == None:
+        return True
+    return num
+
+
+def relayOp(s, prevExpr):
+    if s[0].isdigit():
+        if s.endswith("i8"):
+            dtype = "int8"
+            s = s[:-2]
+        else:
+            dtype = "float32"
+        shape = [1] + [int(dim) for dim in s.split("x")]
+        return relay.var("inp", shape=shape, dtype=dtype)
+
+    ty = relay_util.RelayType(prevExpr)
+    prevShape = ty.getShape()
+    dtype = ty.getDType()
+    if s.startswith("dense"):
+        inSize = prevShape[1]
+        outSize = getNum(s[5:])
+        if outSize == None:
+            outSize = inSize
+        bSize = getArg(s[5:], "b")
+        if bSize == None:
+            bSize = 1
+        outType = ""
+        if dtype == "int8":
+            outType = "int32"
+        return relay.nn.contrib_dense_pack(
+            prevExpr, relay.const(np.zeros((outSize // bSize, inSize, bSize)), dtype), out_dtype=outType
+        )
+    elif s == "add":
+        return relay.add(prevExpr, relay.const(np.zeros(prevShape), dtype))
+    elif s == "relu":
+        return relay.nn.relu(prevExpr)
+    elif s.startswith("conv"):
+        outSize = getNum(s[4:])
+        inSize = prevShape[3]
+        if outSize == None:
+            outSize = inSize
+        kSize = getArg(s[4:], "k")
+        if kSize == None:
+            kSize = 3
+        depthWise = getArg(s[4:], "dw")
+        if depthWise != None:
+            groups = inSize
+            outSize = inSize
+            inSize = 1
+        else:
+            groups = 1
+        pad = getArg(s[4:], "pad")
+        if pad != None:
+            padding = [1, 1, 1, 1]
+        else:
+            padding = [0, 0, 0, 0]
+        stride = getArg(s[4:], "stride")
+        if stride == None:
+            stride = 1
+        outType = ""
+        if dtype == "int8":
+            outType = "int32"
+        return relay.nn.conv2d(
+            prevExpr,
+            relay.const(np.zeros((outSize, inSize, kSize, kSize), dtype)),
+            strides=(stride, stride),
+            padding=padding,
+            kernel_size=(kSize, kSize),
+            data_layout="NHWC",
+            groups=groups,
+            out_dtype=outType,
+        )
+    elif s.startswith("pool"):
+        size = getNum(s[4:])
+        if size == None:
+            size = 2
+        stride = getArg(s[4:], "stride")
+        if stride == None:
+            stride = size
+        return relay.nn.max_pool2d(prevExpr, pool_size=(size, size), strides=(stride, stride), layout="NHWC")
+    elif s == "concat":
+        return relay.concatenate([prevExpr], 0)
+    elif s == "flatten":
+        return relay.reshape(prevExpr, (1, -1))
+    elif s == "reshape":
+        return relay.reshape(prevExpr, prevShape)
+    elif s.startswith("cast"):
+        size = getNum(s[4:])
+        isFloat = getArg(s[4:], "f")
+        if size == 8:
+            dtype = "int8"
+        elif size == 16:
+            dtype = "int16"
+        elif size == 32:
+            dtype = "float32" if isFloat else "int32"
+        elif size == 64:
+            dtype = "float64" if isFloat else "int64"
+        return relay.cast(prevExpr, dtype)
+    elif s == "pad":
+        return relay.nn.pad(prevExpr, pad_width=((0, 0), (1, 1), (1, 1), (0, 0)))
+    elif s == "pad1":
+        return relay.nn.pad(prevExpr, pad_width=((0, 0), (0, 1), (0, 1), (0, 0)))
+    elif s == "pad2":
+        return relay.nn.pad(prevExpr, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
+    else:
+        raise RuntimeError("not implemented:", s)
