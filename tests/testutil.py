@@ -16,6 +16,7 @@ import networkx as nx
 
 import network
 import relay_util
+import pathdiscovery as pd
 
 import tvm
 from tvm import relay
@@ -50,6 +51,10 @@ sys.excepthook = __handle_uncaught
 ass = __tc.assertTrue
 eq = __tc.assertEqual
 neq = __tc.assertNotEqual
+geq = __tc.assertGreaterEqual
+greater = __tc.assertGreater
+leq = __tc.assertLessEqual
+less = __tc.assertLess
 inst = __tc.assertIsInstance
 raises = __tc.assertRaises
 almosteq = __tc.assertAlmostEqual
@@ -205,6 +210,20 @@ def verifySched(sched, G):
         )
 
 
+def translateSplitTypes(str):
+    import pathdiscovery as pd
+
+    splitTypeLUT = {
+        "<": pd.SplitType.LOP,
+        "=": pd.SplitType.PARTITIONED,
+        ">": pd.SplitType.LIP,
+        "~": pd.SplitType.PARTIAL,
+        "#": pd.SplitType.FTP,
+    }
+    assert set(str) <= set(splitTypeLUT.keys())
+    return [splitTypeLUT[t] for t in str]
+
+
 def getNum(s):
     intStr = "".join(itertools.takewhile(str.isdigit, s))
     if intStr == "":
@@ -324,3 +343,32 @@ def relayOp(s, prevExpr):
         return relay.nn.pad(prevExpr, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
     else:
         raise RuntimeError("not implemented:", s)
+
+
+def verifyPath(path, expectedSplitTypes, expectedNumPart):
+    eq(len(path), len(expectedSplitTypes))
+
+    for i, cfg in enumerate(path):
+        eq(cfg.splitType, expectedSplitTypes[i])
+
+        expectedIn = 1 if cfg.splitType in [pd.SplitType.LOP, pd.SplitType.PARTIAL] else expectedNumPart
+        eq(cfg.inSplit.getNumPartitions(), expectedIn)
+        expectedOut = 1 if cfg.splitType in [pd.SplitType.LIP, pd.SplitType.PARTIAL] else expectedNumPart
+        eq(cfg.outSplit.getNumPartitions(), expectedOut)
+
+        for splitT in [cfg.inSplit, cfg.outSplit]:
+            for splitAx in splitT.axes:
+                maxVal = splitT.shape[splitAx.axis]
+                for r in splitAx.ranges:
+                    less(r[0], r[1], "Invalid range order")
+                    geq(r[0], 0)
+                    leq(r[0], maxVal)
+                    geq(r[1], 0)
+                    leq(r[1], maxVal)
+                if i == len(path) - 1 and splitT == cfg.outSplit:
+                    eq(splitAx.ranges[0][0], 0, "Last cfg must produce beginning")
+                    eq(splitAx.ranges[-1][1], maxVal, "Last cfg must produce end")
+                    for i, r in enumerate(splitAx.ranges):
+                        if i == 0:
+                            continue
+                        eq(r[0], splitAx.ranges[i - 1][1], "Last cfg cannot have overlaps or gaps between partitions")

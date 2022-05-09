@@ -1,6 +1,7 @@
 from collections import defaultdict
 import networkx as nx
 import layoutopt
+import exec_timeout
 
 
 def doesOverlap(start1, size1, start2, size2):
@@ -187,41 +188,6 @@ class MemoryPlanner:
             memLayout.addBufToOffset(buf, offsets[i])
         return memLayout
 
-    def createColoringLayout(self):
-        memLayout = MemoryLayout()
-
-        colorToSlot = {}
-        slotToBucketsUsed = {}
-        bufToSlot = {}
-        slotToSize = {}
-
-        for buf, c in nx.coloring.greedy_color(self.conflictGraph).items():
-            if c not in colorToSlot:
-                colorToSlot[c] = len(colorToSlot)
-                slotToBucketsUsed[colorToSlot[c]] = 0
-
-            slot = colorToSlot[c]
-            bucket = slotToBucketsUsed[slot]
-            if bucket >= memLayout.numBuckets:
-                newBucket = memLayout.newBucket()
-                assert newBucket == bucket
-
-            slotToBucketsUsed[slot] += 1
-
-            bufToSlot[buf] = slot
-            if slot not in slotToSize:
-                slotToSize[slot] = buf.size
-            else:
-                slotToSize[slot] = max(slotToSize[slot], buf.size)
-
-        for buf, slot in bufToSlot.items():
-            offset = 0
-            for i in range(0, slot):
-                offset += slotToSize[i]
-            memLayout.addBufToOffset(buf, offset)
-
-        return memLayout
-
     def createTFLMLayout(self):
         memLayout = MemoryLayout()
 
@@ -240,7 +206,6 @@ class MemoryPlanner:
             otherBufs = list(self.conflictGraph.neighbors(buf))
 
             # Use the first available gap.
-            otherBufPlacements = []
             otherPlacedBufs = [b for b in otherBufs if memLayout.isPlaced(b)]
             otherPlacedBufs.sort(key=lambda x: memLayout.getOffset(x))
             currentOffset = 0
@@ -258,3 +223,21 @@ class MemoryPlanner:
             memLayout.addBufToOffset(buf, currentOffset)
 
         return memLayout
+
+
+def memLayoutWithTimeout(n, planner, func, timeout=0.5, noILP=False):
+    def inExternalProcess():
+        bufsToIds = {buf: i for i, buf in enumerate(n.bufs)}
+        memLayout = planner.createOptimalLayout()
+        return {bufsToIds[buf]: data for buf, data in func(memLayout).items()}
+
+    if not noILP:
+        idsToBufs = {i: buf for i, buf in enumerate(n.bufs)}
+        try:
+            idsToData = exec_timeout.exec_timeout(timeout, inExternalProcess)
+            return {idsToBufs[id]: data for id, data in idsToData.items()}
+        except TimeoutError:
+            pass
+
+    memLayout = planner.createTFLMLayout()
+    return {buf: data for buf, data in func(memLayout).items()}

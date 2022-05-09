@@ -31,6 +31,7 @@ class ReplaceCallPass(relay.ExprMutator):
         return newCall
 
 
+# Replaces matchCall with the return value of insertFunc and remembers rememberCall until after type inference.
 class ReplaceAndRemember(relay.ExprMutator):
     def __init__(self, matchCall, insertFunc, rememberCall=None):
         super().__init__()
@@ -57,6 +58,7 @@ class ReplaceAndRemember(relay.ExprMutator):
         return newCall
 
 
+# Returns mappings between calls and graph positions which are stable between InferType passes.
 class GraphPositionVisitor(relay.ExprVisitor):
     def __init__(self):
         super().__init__()
@@ -88,6 +90,7 @@ class GraphPositionVisitor(relay.ExprVisitor):
         super().visit_call(call)
 
 
+# Wrap expressions in this class to compare them between different modules.
 class ExprCmpHelper:
     def __init__(self, e):
         self.e = e
@@ -124,6 +127,7 @@ class ExprCmpHelper:
         return True
 
 
+# Searches mod for equivalent expression of exprFromOtherMod.
 def findFromOtherModule(mod, exprFromOtherMod):
     otherExprHelper = ExprCmpHelper(exprFromOtherMod)
 
@@ -147,6 +151,7 @@ class FindCall(relay.ExprVisitor):
         return super().visit_call(call)
 
 
+# Returns the type of an expression that has not been inferred yet. Costly!
 @functools.lru_cache
 def getCheckedType(expr):
     tmpMod = tvm.IRModule.from_expr(expr)
@@ -154,6 +159,7 @@ def getCheckedType(expr):
     return tmpMod["main"].body.checked_type
 
 
+# Helper to get information about a type in relay.
 class RelayType:
     def __init__(self, arg):
         if isinstance(arg, relay.Constant):
