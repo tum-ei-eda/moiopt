@@ -16,6 +16,7 @@ import networkx as nx
 
 import network
 import relay_util
+import graph_analyzer
 import pathdiscovery as pd
 
 import tvm
@@ -30,15 +31,17 @@ np.random.seed(0)
 tf.random.set_seed(0)
 
 
-def __report():
+def exit():
+    atexit.unregister(exit)
     if __anyFail:
         print("Test failure!")
         sys.exit(1)
     else:
         print("All tests OK!")
+        sys.exit(0)
 
 
-atexit.register(__report)
+atexit.register(exit)
 
 
 def __handle_uncaught(t, v, tb):
@@ -193,20 +196,23 @@ def verifySched(sched, G):
     minTested = 9e99
     minSched = None
     allSched = []
-    for sched in nx.all_topological_sorts(G):
-        memTest = getSchedMemUsage(sched, G)
-        allSched.append((sched, memTest))
+    for s in nx.all_topological_sorts(G):
+        memTest = getSchedMemUsage(s, G)
+        allSched.append((s, memTest))
         if memTest < minTested:
             minTested = memTest
-            minSched = sched
+            minSched = s
     if minTested < memFound:
         fail(
             "Test failed: A better schedule was found: "
-            + str(memFound)
-            + " "
-            + str(minTested)
-            + " "
             + "".join(minSched)
+            + " ("
+            + str(minTested)
+            + ") - Solution: "
+            + "".join(sched)
+            + " ("
+            + str(memFound)
+            + ")"
         )
 
 
@@ -372,3 +378,30 @@ def verifyPath(path, expectedSplitTypes, expectedNumPart):
                         if i == 0:
                             continue
                         eq(r[0], splitAx.ranges[i - 1][1], "Last cfg cannot have overlaps or gaps between partitions")
+
+
+def opsStrToModAndSplitPath(ops):
+    exprs = []
+    prevExpr = relayOp(ops[0], None)
+    exprs.append(prevExpr)
+    for op in ops[1:]:
+        prevExpr = relayOp(op, prevExpr)
+        exprs.append(prevExpr)
+
+    mod = tvm.IRModule.from_expr(exprs[-1])
+    mod = relay.transform.InferType()(mod)
+    analyzer = graph_analyzer.GraphAnalyzer()
+    analyzer.run(mod["main"])
+    sn = analyzer.makeNet()
+
+    maxOpSize = 0
+    maxOp = None
+    for op in sn.ops:
+        if op.getSize() > maxOpSize:
+            maxOpSize = op.getSize()
+            maxOp = op
+    assert maxOp != None
+    targetExpr = analyzer.getExprFromBuf(maxOp.getOutputs()[0])
+
+    discovery = pd.PathDiscovery(targetExpr, analyzer, sn)
+    return mod, discovery.discoverBest(mod)
