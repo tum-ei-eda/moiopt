@@ -18,11 +18,13 @@ class ErrorException(Exception):
 
 class ILPSolver:
     def __init__(self):
-        solveType = pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING
+        # solveType = pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING
         # solveType = pywraplp.Solver.GUROBI_MIXED_INTEGER_PROGRAMMING
+        solveType = pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING
         self.s = pywraplp.Solver("solver", solveType)
         self.genId = 0
-        self.M = 1e7
+        self.M = 1e6
+        # self.s.EnableOutput()
 
     def getObjectiveFunc(self):
         obj = self.s.Objective()
