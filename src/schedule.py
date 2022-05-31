@@ -1,5 +1,64 @@
+from collections import defaultdict
 import ilpsolver
+import schedule_sp_dec
+import schedule_sp
 import networkx as nx
+
+
+def is_sp_graph(G):
+    if len(G.nodes) < 3:
+        return True
+    spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
+    if spType == schedule_sp_dec.SPType.INVALID:
+        return False
+    isSP = True
+    if len(G1.edges) != 1:
+        isSP &= is_sp_graph(G1)
+    if len(G2.edges) != 1:
+        isSP &= is_sp_graph(G2)
+    return isSP
+
+
+class DummyNode:
+    def __init__(self, parent=None):
+        self.parent = parent
+
+    def __repr__(self):
+        return "Dummy" + (("(" + str(self.parent) + ")") if self.parent else "")
+
+    def __lt__(self, other):
+        return id(self) < id(other)
+
+
+# Convert ML model graph to task graph with weights on nodes (computation cost) and edges (communication cost).
+def makeTaskGraph(G):
+    TG = nx.DiGraph(G)
+    for sink in [n for n in TG.nodes if TG.out_degree(n) == 0]:
+        TG.add_edge(sink, DummyNode())
+    for n in TG.nodes:
+        for e in TG.out_edges(n):
+            TG.edges[e]["w"] = TG.nodes[n]["outsize"]
+        TG.nodes[n]["w"] = 0
+    return TG
+
+
+# Convert task graph to cumulative weight model.
+def makeCumGraph(G):
+    G = makeTaskGraph(G)
+    CG = nx.DiGraph()
+    endN = {}
+    for n in G.nodes:
+        endN[n] = DummyNode(n)
+        CG.add_edge(n, endN[n])
+        w = G.nodes[n]["w"]
+        CG.nodes[n]["cw"] = w
+        CG.nodes[endN[n]]["cw"] = -w
+    for e in G.edges:
+        CG.add_edge(endN[e[0]], e[1])
+        w = G.edges[e]["w"]
+        CG.nodes[e[0]]["cw"] += w
+        CG.nodes[endN[e[1]]]["cw"] -= w
+    return CG
 
 
 class SchedOpt:
@@ -11,8 +70,8 @@ class SchedOpt:
         # Insert single source and sink nodes.
         sources = [n for n, deg in G.in_degree() if deg == 0]
         sinks = [n for n, deg in G.out_degree() if deg == 0]
-        sourceNode = "^"
-        sinkNode = "$"
+        sourceNode = DummyNode()
+        sinkNode = DummyNode()
         G = nx.DiGraph(G)
         if len(sources) == 0 or len(sinks) == 0:
             assert len(sources) == 0 and len(sinks) == 0
@@ -22,27 +81,39 @@ class SchedOpt:
         G.nodes[sourceNode]["outsize"] = 1
         G.nodes[sinkNode]["outsize"] = 1
 
-        # Solve for each independent problem.
-        cutG = nx.Graph(G)
-        br = list(nx.bridges(cutG))
-        cutG.remove_edges_from(br)
-        scheds = {}
-        for comp in nx.connected_components(cutG):
-            subG = G.subgraph(comp).copy()
-            if len(subG.nodes) == 1:
-                n = list(subG.nodes)[0]
-                scheds[n] = [n]
+        sched = self.solveSubproblem(G)
+
+        # Remove any dummy nodes.
+        return [n for n in sched if not isinstance(n, DummyNode)]
+
+    def solveSubproblem(self, G):
+        if len(G.edges) == 1:
+            e = list(G.edges)[0]
+            return [e[0], e[1]]
+        spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
+        # Try to split into independent problems by considering series composition.
+        if spType == schedule_sp_dec.SPType.SERIES:
+            if len(G1.nodes) == 1:
+                sched1 = list(G1.nodes)
             else:
-                sched = self.solveImpl(subG)
-                scheds[sched[0]] = sched
+                sched1 = self.solveSubproblem(G1)
+            if len(G2.nodes) == 1:
+                sched2 = list(G2.nodes)
+            else:
+                sched2 = self.solveSubproblem(G2)
+            return sched1 + sched2[1:]
 
-        # Reassemble in original order and remove source/sink.
-        sched = []
-        for n in nx.topological_sort(G):
-            sched.extend(scheds.get(n, []))
-        return sched[1:-1]
+        if is_sp_graph(G):
+            # Solve series-parallel graphs with polynomial time algorithm.
+            CG = makeCumGraph(G)
+            sched = schedule_sp.sp_schedule(CG)[0]
+            return sched
 
-    def solveImpl(self, G):
+        # Solve general graphs with MILP.
+        sched = self.solveILP(G)
+        return sched
+
+    def solveILP(self, G):
         numNodes = len(G.nodes)
 
         # 0 <= t[i] < N
@@ -61,11 +132,11 @@ class SchedOpt:
             for pred in G.predecessors(node):
                 self.ilp.greaterThan(t[i], t[nodeToIdx[pred]])
             # t[i] < t_succs  /  Optional?
-            for succ in G.successors(node):
-                self.ilp.lessThan(t[i], t[nodeToIdx[succ]])
+            # for succ in G.successors(node):
+            #    self.ilp.lessThan(t[i], t[nodeToIdx[succ]])
             # t[i] != t[j]  forall  j=0...i-1
-            for j in range(0, i):
-                self.ilp.notEqual(t[i], t[j])
+            # for j in range(0, i):
+            #    self.ilp.notEqual(t[i], t[j])
 
         h = []
         for x in range(numNodes):
@@ -121,16 +192,6 @@ class SchedOpt:
         nodeOrder = []
         for i in range(numNodes):
             nodeOrder.append((int(t[i].solution_value()), idxToNode[i]))
-
-        # for x in range(numNodes):
-        #     activeNodes = ""
-        #     for i in range(numNodes):
-        #         val = int(h[x][i].solution_value())
-        #         print(val, end="")
-        #         if val == 1:
-        #             activeNodes += idxToNode[i] + " "
-        #     print("", int(m[x].solution_value()), activeNodes)
-        # print("max mem:", int(maxM.solution_value()))
 
         sched = []
         for i, node in sorted(nodeOrder, key=lambda x: x[0]):
