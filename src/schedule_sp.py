@@ -63,7 +63,7 @@ def combine(T, root, sequences):
             segments.append((segValue, seg))
     # Arrange segments by their segment value.
     ordering = []
-    for seg in sorted(segments, reverse=True):
+    for seg in sorted(segments, key=lambda x: x[0], reverse=True):
         ordering.extend(seg[1])
     ordering.append(root)
     return ordering

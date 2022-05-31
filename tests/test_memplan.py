@@ -10,7 +10,7 @@ def test(*args):
     memLayout = planner.createOptimalLayout()
 
     # Small error is okay for very large values that exceed the solvers upper bound.
-    tu.almosteq(memLayout.getSize(), expected, delta=0.000001 * expected)
+    tu.almosteq(memLayout.getSize(), expected, delta=0.000002 * expected)
 
 
 # Basic
