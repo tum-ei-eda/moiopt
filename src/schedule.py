@@ -89,7 +89,7 @@ class SchedOpt:
     def solveSubproblem(self, G):
         if len(G.edges) == 1:
             e = list(G.edges)[0]
-            return [e[0], e[1]]
+            return (e[0], e[1])
         spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
         # Try to split into independent problems by considering series composition.
         if spType == schedule_sp_dec.SPType.SERIES:
@@ -106,8 +106,7 @@ class SchedOpt:
         if is_sp_graph(G):
             # Solve series-parallel graphs with polynomial time algorithm.
             CG = makeCumGraph(G)
-            sched = schedule_sp.sp_schedule(CG)[0]
-            return sched
+            return schedule_sp.sp_schedule(CG)[0]
 
         # Solve general graphs with MILP.
         sched = self.solveILP(G)
@@ -196,7 +195,7 @@ class SchedOpt:
         sched = []
         for i, node in sorted(nodeOrder, key=lambda x: x[0]):
             sched.append(node)
-        return sched
+        return tuple(sched)
 
 
 def solve(G):

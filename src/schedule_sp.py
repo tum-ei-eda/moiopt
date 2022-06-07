@@ -1,3 +1,4 @@
+from functools import lru_cache
 import networkx as nx
 import schedule_sp_dec
 
@@ -13,6 +14,7 @@ def cost(T, node):
 
 
 # Accumulated pebble cost of a sequence until a node on a tree.
+@lru_cache(maxsize=None)
 def accumulated_cost(T, node, sequence):
     prevIndex = sequence.index(node) - 1
     if prevIndex >= 0:
@@ -66,17 +68,15 @@ def combine(T, root, sequences):
     for seg in sorted(segments, key=lambda x: x[0], reverse=True):
         ordering.extend(seg[1])
     ordering.append(root)
-    return ordering
+    return tuple(ordering)
 
 
 # Returns the optimal ordering of the given tree.
 def pebble_ordering(T, root):
     children = list(T.predecessors(root))
     if len(children) == 0:
-        return [root]
-    orderings = []
-    for node in children:
-        orderings.append(pebble_ordering(T, node))
+        return tuple([root])
+    orderings = tuple(pebble_ordering(T, node) for node in children)
     return combine(T, root, orderings)
 
 
@@ -117,7 +117,7 @@ def pc_schedule(G, S, T, source, sink):
             GT.remove_node(n)
     s1 = tree_schedule(reverse_graph(GS), source)
     s2 = tree_schedule(GT, sink)
-    s1.reverse()
+    s1 = tuple(reversed(s1))
     return s1 + s2
 
 
@@ -135,18 +135,18 @@ def linearize_graph(G, sched):
 
 
 # Returns an optimal schedule of the given series-parallel graph, along with its min-w-cut.
-def sp_schedule(G):
+def sp_schedule_impl(G):
     # Base case where there is only a single edge.
     if len(G.edges) == 1:
         e = list(G.edges)[0]
-        return [e[0], e[1]], {e[0]}, {e[1]}
+        return (e[0], e[1]), {e[0]}, {e[1]}
 
     # Decompose G into G1 and G2 which are either in series or parallel to each other.
     spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
     assert spType != schedule_sp_dec.SPType.INVALID
 
-    sched1, S1, T1 = sp_schedule(G1)
-    sched2, S2, T2 = sp_schedule(G2)
+    sched1, S1, T1 = sp_schedule_impl(G1)
+    sched2, S2, T2 = sp_schedule_impl(G2)
 
     # Series composition
     if spType == schedule_sp_dec.SPType.SERIES:
@@ -174,3 +174,8 @@ def sp_schedule(G):
         G = nx.compose(G1, G2)
         sched = pc_schedule(G, S, T, sched1[0], sched2[-1])
         return sched, S, T
+
+
+def sp_schedule(G):
+    accumulated_cost.cache_clear()
+    return sp_schedule_impl(G)
