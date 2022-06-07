@@ -5,6 +5,7 @@ from tvm import relay
 import relay_util
 import network
 import memplanner
+import graph_analyzer
 from optypes import OpArgType, OpType, getOpArgType, getOpType
 
 
@@ -761,6 +762,23 @@ class SplitPath:
 
         return True
 
+    def compareOnEqualSize(self, other):
+        selfTy = self[0].splitType
+        otherTy = other[0].splitType
+
+        # Prefer non-FTP type splits to avoid recomputation.
+        if selfTy == SplitType.FTP and otherTy != SplitType.FTP:
+            return False
+        elif otherTy == SplitType.FTP and selfTy != SplitType.FTP:
+            return True
+
+        # Prefer shorter paths.
+        if len(self) < len(other):
+            return True
+
+        # Prefer fewer partitions.
+        return self.getNumPartitions() < other.getNumPartitions()
+
     def __len__(self):
         return len(self.preCfgs) + 1 + len(self.postCfgs)
 
@@ -966,44 +984,43 @@ class PathDiscovery:
         self.onlyFTP = onlyFTP
         assert not self.noFTP or not self.onlyFTP
 
+    def evaluateSize(self, mod):
+        analyzer = graph_analyzer.GraphAnalyzer()
+        analyzer.run(mod["main"])
+        testNet = analyzer.makeNet()
+        sched = testNet.createBestSchedule()
+        planner = memplanner.MemoryPlanner(sched)
+
+        def cbLayout(memLayout):
+            return {testNet.bufs[0]: memLayout.getSize()}
+
+        sz = memplanner.memLayoutWithTimeout(testNet, planner, cbLayout)
+        return sz.popitem()[1]
+
     def discoverBest(self, mod):
         self.discoverAll()
 
-        bestSize = self.analyzer.exprToOp[self.startExpr].getSize()
-        bestPath = None
         import moiopt
-        import graph_analyzer
+
+        fusedMod = relay.transform.FuseOps()(mod)
+        bestSize = self.evaluateSize(fusedMod)
+        # bestSize = self.analyzer.exprToOp[self.startExpr].getSize()
+        print("initial best size:", bestSize)
+        bestPath = None
         for path in self.splitPaths:
             print("PATH:", path)
             testMod = moiopt.SplitPathPass(path)(mod)
             testMod = relay.transform.InferType()(testMod)
             testMod = relay.transform.FuseOps()(testMod)
             testMod = moiopt.FixTupleDepdendencyPass()(testMod)
-
-            analyzer = graph_analyzer.GraphAnalyzer()
-            analyzer.run(testMod["main"])
-            testNet = analyzer.makeNet()
-            sched = testNet.createBestSchedule()
-            planner = memplanner.MemoryPlanner(sched)
-
-            def cbLayout(memLayout):
-                if (
-                    path[0].splitType == SplitType.FTP
-                    and path[0].getNumPartitions() == 9
-                    and len(path) == 13
-                    and len(path[0].outSplit.axes) == 2
-                ):
-                    import plot
-
-                    plot.drawLayoutChart("ftp3x3", memLayout, planner)
-                return {testNet.bufs[0]: memLayout.getSize()}
-
-            sz = memplanner.memLayoutWithTimeout(testNet, planner, cbLayout)
-            sz = sz.popitem()[1]
+            sz = self.evaluateSize(testMod)
             print(path.shortDesc(), "-----", sz)
             if sz < bestSize:
                 bestSize = sz
                 bestPath = path
+            elif sz == bestSize and bestPath != None:
+                if path.compareOnEqualSize(bestPath):
+                    bestPath = path
 
         if bestPath != None and bestPath.getNumPartitions() < 2:
             return None
