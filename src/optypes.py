@@ -22,8 +22,8 @@ def getOpType(expr):
         return OpType.NONE
 
     if name in [
-        "add",
-        "subtract",
+        # "add",  # could be supported by other means.
+        # "subtract",
         "multiply",
         "divide",
         "fixed_point_multiply",
@@ -33,7 +33,7 @@ def getOpType(expr):
         "take",
     ]:
         return OpType.ELEMWISE_LINEAR
-    elif name in ["round", "clip", "nn.relu", "tanh"]:
+    elif name in ["round", "clip", "nn.relu", "tanh", "add", "subtract"]:
         return OpType.ELEMWISE_NONLINEAR
     elif name in [
         "nn.softmax",
