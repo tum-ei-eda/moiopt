@@ -1,4 +1,5 @@
 tensorflow
+tflite
 numpy
 networkx
 ortools
