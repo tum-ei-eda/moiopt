@@ -303,6 +303,8 @@ def relayOp(s, prevExpr):
         )
     elif s == "add":
         return relay.add(prevExpr, relay.const(np.zeros(prevShape), dtype))
+    elif s == "mult":
+        return relay.multiply(prevExpr, relay.const(1.0, dtype))
     elif s == "relu":
         return relay.nn.relu(prevExpr)
     elif s.startswith("conv"):

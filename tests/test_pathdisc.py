@@ -85,9 +85,9 @@ test(["dense", "reshape"], "<=")
 test(["reshape", "dense"], "=>")
 
 # Longer chains.
-test(["dense", "add", "dense", "add"], "<=>~")
-test(["dense", "add", "relu", "add", "relu", "dense", "add", "add"], "<====>~~")
-test(["dense", "add", "dense", "add"], "<=>~", startOp=1, infer="udd")
+test(["dense", "add", "dense", "mult"], "<=>~")
+test(["dense", "add", "relu", "add", "relu", "dense", "mult", "mult"], "<====>~~")
+test(["dense", "add", "dense", "mult"], "<=>~", startOp=1, infer="udd")
 test(["dense", "add", "dense", "add"], "<=", startOp=2)
 
 # Invalid chains.
@@ -97,8 +97,8 @@ test(["relu", "concat"], "=")
 test(["dense", "dense", "add"], "<", startOp=1, infer="u")
 test(["dense", "dense", "relu"], "<>")
 test(["dense", "dense", "dense"], "<>")
-test(["dense", "dense", "add", "relu"], "<>~")
-test(["dense", "dense", "add", "dense"], "<>~")
+test(["dense", "dense", "mult", "relu"], "<>~")
+test(["dense", "dense", "mult", "dense"], "<>~")
 
 # Batched dense.
 test(["dense10b5", "add"], "<=")
@@ -121,7 +121,7 @@ test(["pool", "conv"], "=>")
 # test(["conv", "flatten", "dense"], "<=>")
 # test(["conv", "flatten", "dense10b5"], "<=>")
 test(["conv", "conv", "conv10dw"], "<>~")
-test(["conv", "add", "relu", "pool", "conv10dw", "relu", "conv", "add", "conv10dw", "add"], "<=====>~~~")
+test(["conv", "add", "relu", "pool", "conv10dw", "relu", "conv", "mult", "conv10dw", "mult"], "<=====>~~~")
 test(["convpad", "convpad"], "<>")
 test(["conv", "reshape"], "<=")
 test(["reshape", "conv"], "=>")
