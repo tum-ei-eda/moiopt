@@ -18,6 +18,7 @@ import network
 import relay_util
 import graph_analyzer
 import pathdiscovery as pd
+from load_tflite_model import load_tflite_model
 
 import tvm
 from tvm import relay
@@ -172,6 +173,31 @@ def runTVM(c_mod, c_params, modelInfo, inputData="random"):
         out = gmod.get_output(i, tvm.nd.empty(t.shape, dtype=t.ty)).asnumpy()
         outTensors.append(out)
     return outTensors
+
+
+def kerasToRelay(keras_model):
+    keras_model.compile()
+    converter = tf.lite.TFLiteConverter.from_keras_model(keras_model)
+    tflite_model = converter.convert()
+    return load_tflite_model(tflite_model)
+
+
+def kerasDense(layerSizes, inputSize, outputSize=1, activation="tanh"):
+    layers = [kl.Input(shape=(inputSize,))]
+    layers += [kl.Dense(sz, activation=activation, bias_initializer="uniform") for sz in layerSizes]
+    layers += [kl.Dense(outputSize, activation=activation)]
+    return km.Sequential(layers)
+
+
+def kerasConv(nFeatures, kernelSize, activation="tanh", padding="valid", input_shape=(100, 100, 3)):
+    return km.Sequential(
+        [
+            kl.Conv2D(nFeatures, kernelSize, activation=activation, padding=padding, input_shape=input_shape),
+            kl.MaxPooling2D(),
+            kl.Conv2D(nFeatures, kernelSize, activation=activation, padding=padding),
+            kl.MaxPooling2D(),
+        ]
+    )
 
 
 def getSchedMemUsage(sched, G):
