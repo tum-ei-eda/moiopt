@@ -12,7 +12,7 @@ def test(ops, expectedNumPart, expectedSplitTypes=""):
         tu.verifyPath(splitPath, expectedSplitTypes, expectedNumPart)
 
 
-test(["100", "dense1000", "add", "dense10"], 10, "<=>")
+test(["100", "dense1000", "add", "dense10"], 11, "<=>")
 test(["100", "dense150", "add", "dense20"], 3, "<=>")
 test(["100", "dense200", "add", "dense30"], 3, "<=>")
 test(["100", "dense200", "add", "dense100"], 1)
@@ -26,18 +26,18 @@ test(["100", "dense100", "cast8", "dense100"], 1)
 
 test(["32x32x3", "conv20", "add", "conv10"], 3, "###")
 test(["32x32x3", "conv20pad", "add", "conv10pad"], 3, "###")
-test(["32x32x3", "pad", "conv20", "pad", "conv5"], 9, "####")
-test(["32x32x3", "conv200", "add", "conv10"], 9, "###")
-test(["32x32x3", "conv2000", "add", "conv10"], 10, "<=>")
-test(["32x32x3", "conv1000", "add", "conv10"], 9, "###")
-test(["32x32x3", "conv20stride2", "add", "conv5stride2"], 9, "###")
+test(["32x32x3", "pad", "conv20", "pad", "conv5"], 16, "####")
+test(["32x32x3", "conv200", "add", "conv10"], 16, "###")
+test(["32x32x3", "conv2000", "add", "conv10"], 16, "###")
+test(["32x32x3", "conv1000", "add", "conv10"], 16, "###")
+test(["32x32x3", "conv20stride2", "add", "conv5stride2"], 16, "###")
 
-test(["32x32x3", "conv20", "conv", "pool"], 9, "###")
-test(["32x32x3", "conv20", "conv40", "conv80", "pool", "conv100", "pool", "conv120", "pool"], 9, "######")
+test(["32x32x3", "conv20", "conv", "pool"], 16, "###")
+test(["32x32x3", "conv20", "conv40", "conv80", "pool", "conv100", "pool", "conv120", "pool"], 16, "######")
 
 test(["1", "dense5", "add", "relu", "reshape", "dense1", "relu"], 4, "<===>")
 test(["100", "dense200b8", "add", "relu", "reshape", "dense100b5", "relu"], 2, "<===>")
-test(["100x100x3", "conv10pad", "add", "relu", "pool", "conv10pad", "add", "relu", "pool"], 9, "########")
+test(["100x100x3", "conv10pad", "add", "relu", "pool", "conv10pad", "add", "relu", "pool"], 16, "########")
 
 test(
     [
@@ -113,7 +113,7 @@ test(
         "conv512",
         "cast8",
     ],
-    9,
+    16,
     "####################",
 )
 test(
@@ -128,7 +128,7 @@ test(
         "conv192",
         "pool3stride2",
     ],
-    9,
+    16,
     "########",
 )
 test(
@@ -167,4 +167,4 @@ test(
         "cast8",
     ], 3, "<===="
 )
-test(["12x12x5", "conv15", "conv2", "pool", "flatten", "dense10"], 3, "<>")
+test(["12x12x5", "conv15", "conv2", "pool", "flatten", "dense10"], 16, "###")
