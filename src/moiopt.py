@@ -341,7 +341,7 @@ class SplitPathPass(relay.ExprMutator):
                 pass
             else:
                 raise RuntimeError("unexpected split type for conv")
-        elif n == "nn.contrib_dense_pack":
+        elif n in ["nn.contrib_dense_pack", "nn.dense"]:
             if splitCfg.splitType == SplitType.LOP:
                 if attrs["units"] != None:
                     units = 1

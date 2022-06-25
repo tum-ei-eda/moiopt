@@ -33,7 +33,7 @@ def getOpType(expr):
         "take",
     ]:
         return OpType.ELEMWISE_LINEAR
-    elif name in ["round", "clip", "nn.relu", "tanh", "add", "subtract"]:
+    elif name in ["round", "clip", "nn.relu", "nn.prelu", "tanh", "add", "subtract"]:
         return OpType.ELEMWISE_NONLINEAR
     elif name in [
         "nn.softmax",
@@ -42,7 +42,7 @@ def getOpType(expr):
     ]:
         # TODO: concat is splitable and possible target of identity transformation
         return OpType.NONE
-    elif name == "nn.contrib_dense_pack":
+    elif name in ["nn.contrib_dense_pack", "nn.dense"]:
         return OpType.DENSE
     elif name == "nn.conv2d":
         if relay_util.isDepthwiseConv(expr):
@@ -76,6 +76,7 @@ def getOpArgType(expr):
         "fixed_point_multiply",
         "tanh",
         "nn.relu",
+        "nn.prelu",
         "nn.max_pool2d",
         "nn.avg_pool2d",
         "nn.pad",
@@ -91,7 +92,7 @@ def getOpArgType(expr):
             return OpArgType.DWCONV
         else:
             return OpArgType.CONV
-    elif name == "nn.contrib_dense_pack":
+    elif name in ["nn.contrib_dense_pack", "nn.dense"]:
         return OpArgType.DENSE
     else:
         raise RuntimeError("unhandled op name: " + name)

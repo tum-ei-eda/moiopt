@@ -1,4 +1,5 @@
 from collections import defaultdict
+import exec_timeout
 import ilpsolver
 import schedule_sp_dec
 import schedule_sp
@@ -109,8 +110,21 @@ class SchedOpt:
             return schedule_sp.sp_schedule(CG)[0]
 
         # Solve general graphs with MILP.
-        sched = self.solveILP(G)
+        sched = self.solveILPWithTimeout(G)
         return sched
+
+    def solveILPWithTimeout(self, G, timeout=0.5):
+        def inExternalProcess():
+            nodesToIds = {node: i for i, node in enumerate(G.nodes)}
+            sched = self.solveILP(G)
+            return [nodesToIds[node] for node in sched]
+
+        idsToNodes = {i: node for i, node in enumerate(G.nodes)}
+        try:
+            ids = exec_timeout.exec_timeout(timeout, inExternalProcess)
+            return [idsToNodes[id] for id in ids]
+        except TimeoutError:
+            return list(nx.topological_sort(G))
 
     def solveILP(self, G):
         numNodes = len(G.nodes)

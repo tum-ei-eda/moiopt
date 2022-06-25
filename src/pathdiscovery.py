@@ -9,7 +9,7 @@ import graph_analyzer
 from optypes import OpArgType, OpType, getOpArgType, getOpType
 
 
-MAX_PARTITIONS = 10
+MAX_PARTITIONS = 16
 # Describes how an operation is split.
 SplitType = Enum("SplitType", "NOTSPLIT PARTITIONED LOP LIP PARTIAL FTP")
 # Describes the result of split inference. Adjusted means that the inferred from type was changed.
@@ -862,26 +862,38 @@ def createAllSplitConfigs(expr):
 
             maxPartitions = min(dim, MAX_PARTITIONS)
             for numPartitions in range(2, maxPartitions + 1):
+                if numPartitions in [6,8,10,12,13,15]:
+                    continue
                 ranges = getSplitRanges(dim, numPartitions)
                 cfgs.append(SplitConfig(expr, splitType, outSplit=SplitTensor(shape, [SplitAxis(axis, ranges)])))
 
     # Split by two axes, FTP style.
     if opTy in [OpType.ELEMWISE_LINEAR, OpType.ELEMWISE_NONLINEAR, OpType.CONV, OpType.POOL]:
-        if len(shape) == 4 and shape[1] >= 3 and shape[2] >= 3:
-            ranges1 = getSplitRanges(shape[1], 2)
-            ranges2 = getSplitRanges(shape[2], 2)
-            cfgs.append(
-                SplitConfig(
-                    expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
+        if len(shape) == 4:
+            if shape[1] >= 2 and shape[2] >= 2:
+                ranges1 = getSplitRanges(shape[1], 2)
+                ranges2 = getSplitRanges(shape[2], 2)
+                cfgs.append(
+                    SplitConfig(
+                        expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
+                    )
                 )
-            )
-            ranges1 = getSplitRanges(shape[1], 3)
-            ranges2 = getSplitRanges(shape[2], 3)
-            cfgs.append(
-                SplitConfig(
-                    expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
+            if shape[1] >= 3 and shape[2] >= 3:
+                ranges1 = getSplitRanges(shape[1], 3)
+                ranges2 = getSplitRanges(shape[2], 3)
+                cfgs.append(
+                    SplitConfig(
+                        expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
+                    )
                 )
-            )
+            if shape[1] >= 4 and shape[2] >= 4:
+                ranges1 = getSplitRanges(shape[1], 4)
+                ranges2 = getSplitRanges(shape[2], 4)
+                cfgs.append(
+                    SplitConfig(
+                        expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
+                    )
+                )
 
     return cfgs
 
