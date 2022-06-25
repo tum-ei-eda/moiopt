@@ -122,9 +122,9 @@ class SchedOpt:
         idsToNodes = {i: node for i, node in enumerate(G.nodes)}
         try:
             ids = exec_timeout.exec_timeout(timeout, inExternalProcess)
-            return [idsToNodes[id] for id in ids]
+            return tuple([idsToNodes[id] for id in ids])
         except TimeoutError:
-            return list(nx.topological_sort(G))
+            return tuple(nx.topological_sort(G))
 
     def solveILP(self, G):
         numNodes = len(G.nodes)
