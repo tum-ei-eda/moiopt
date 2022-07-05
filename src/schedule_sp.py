@@ -135,18 +135,23 @@ def linearize_graph(G, sched):
 
 
 # Returns an optimal schedule of the given series-parallel graph, along with its min-w-cut.
-def sp_schedule_impl(G):
+def sp_schedule_impl(esg):
+    G = esg.view()
+
     # Base case where there is only a single edge.
     if len(G.edges) == 1:
         e = list(G.edges)[0]
         return (e[0], e[1]), {e[0]}, {e[1]}
 
     # Decompose G into G1 and G2 which are either in series or parallel to each other.
-    spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
+    spType, esg1, esg2 = schedule_sp_dec.decompose_sp_graph(esg)
     assert spType != schedule_sp_dec.SPType.INVALID
 
-    sched1, S1, T1 = sp_schedule_impl(G1)
-    sched2, S2, T2 = sp_schedule_impl(G2)
+    sched1, S1, T1 = sp_schedule_impl(esg1)
+    sched2, S2, T2 = sp_schedule_impl(esg2)
+
+    G1 = esg1.view()
+    G2 = esg2.view()
 
     # Series composition
     if spType == schedule_sp_dec.SPType.SERIES:
@@ -178,4 +183,4 @@ def sp_schedule_impl(G):
 
 def sp_schedule(G):
     accumulated_cost.cache_clear()
-    return sp_schedule_impl(G)
+    return sp_schedule_impl(schedule_sp_dec.EfficientSubgraph(G))

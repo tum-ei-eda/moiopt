@@ -1,14 +1,46 @@
 import networkx as nx
 from enum import Enum
+from collections import defaultdict
 
 
 SPType = Enum("SPType", "INVALID SERIES PARALLEL")
 
 
+class EfficientSubgraph:
+    def __init__(self, G, filterN=None, filterE=None):
+        self.G = G
+        self.fN = filterN if filterN != None else []
+        self.fE = filterE if filterE != None else []
+
+    def view(self):
+        return nx.restricted_view(self.G, self.fN, self.fE)
+
+    def subgraph(self, filterN=None, filterE=None):
+        filterN = self.fN + filterN if filterN != None else self.fN
+        if filterE != None and filterE != []:
+            G = self.view()
+            nodeToReducedDeg = defaultdict(int)
+            for e in filterE:
+                nodeToReducedDeg[e[0]] += 1
+                nodeToReducedDeg[e[1]] += 1
+            for n, redDeg in nodeToReducedDeg.items():
+                if G.degree(n) <= redDeg and n not in filterN:
+                    filterN.append(n)
+        filterE = self.fE + filterE if filterE != None else self.fE
+        return EfficientSubgraph(self.G, filterN, filterE)
+
+    def subgraph_keep(self, keepN=None, keepE=None):
+        G = self.view()
+        filterN = [n for n in G.nodes if n not in keepN] if keepN != None else []
+        filterE = [e for e in G.edges if e not in keepE] if keepE != None else []
+        return self.subgraph(filterN, filterE)
+
+
 # Decomposes the given graph into two series or parallel graphs.
 # Not the most efficient, but simple to understand. An improvement would be:
 # "The Recognition of Series Parallel Digraphs" by J. Valdes et al.
-def decompose_sp_graph(G):
+def decompose_sp_graph(esg):
+    G = esg.view()
     assert len(G.edges) > 1
 
     sources = []
@@ -24,15 +56,9 @@ def decompose_sp_graph(G):
     source = sources[0]
     sink = sinks[0]
     if G.out_degree(source) == 1:
-        G1 = G.edge_subgraph(G.out_edges(source)).copy()
-        G2 = nx.DiGraph(G)
-        G2.remove_node(source)
-        return SPType.SERIES, G1, G2
+        return SPType.SERIES, esg.subgraph_keep(keepE=list(G.out_edges(source))), esg.subgraph([source])
     elif G.in_degree(sink) == 1:
-        G1 = nx.DiGraph(G)
-        G1.remove_node(sink)
-        G2 = G.edge_subgraph(G.in_edges(sink)).copy()
-        return SPType.SERIES, G1, G2
+        return SPType.SERIES, esg.subgraph([sink]), esg.subgraph_keep(keepE=list(G.in_edges(sink)))
 
     # Check for other series composition by removing nodes and checking if we get two connected components.
     for n in G.nodes:
@@ -40,31 +66,29 @@ def decompose_sp_graph(G):
         GR.remove_node(n)
         comps = list(nx.connected_components(GR))
         if len(comps) == 2:
-            G1 = nx.DiGraph(G)
-            G2 = nx.DiGraph(G)
             # Make sure G1 is connected to the source.
             if source in comps[1]:
                 assert sink in comps[0]
                 comps[0], comps[1] = comps[1], comps[0]
+            filterN1 = []
+            filterN2 = []
             for n in G.nodes:
                 if n in comps[0]:
-                    G2.remove_node(n)
+                    filterN2.append(n)
                 elif n in comps[1]:
-                    G1.remove_node(n)
-            return SPType.SERIES, G1, G2
+                    filterN1.append(n)
+            return SPType.SERIES, esg.subgraph(filterN1), esg.subgraph(filterN2)
         assert len(comps) == 1
 
     # Check for parallel composition by picking a source edge and walking its connections.
     # First, the special case where source and sink are directly connected must be considered.
     outEdges = list(G.out_edges(source))
     if (source, sink) in outEdges:
-        G1 = nx.DiGraph(G)
-        G2 = nx.DiGraph(G)
-        G1.remove_edge(source, sink)
+        filterN2 = []
         for n in G.nodes:
             if n not in [source, sink]:
-                G2.remove_node(n)
-        return SPType.PARALLEL, G1, G2
+                filterN2.append(n)
+        return SPType.PARALLEL, esg.subgraph(filterE=[(source, sink)]), esg.subgraph(filterN2)
     startNode = outEdges[0][1]
     visitedNodes = {source, sink, startNode}
     currentNodes = {startNode}
@@ -81,13 +105,13 @@ def decompose_sp_graph(G):
     if len(G.nodes) == len(visitedNodes):
         return SPType.INVALID, None, None
     # Otherwise, there is a parallel composition.
-    G1 = nx.DiGraph(G)
-    G2 = nx.DiGraph(G)
+    filterN1 = []
+    filterN2 = []
     for n in G.nodes:
         if n in [source, sink]:
             continue
         if n in visitedNodes:
-            G1.remove_node(n)
+            filterN1.append(n)
         else:
-            G2.remove_node(n)
-    return SPType.PARALLEL, G1, G2
+            filterN2.append(n)
+    return SPType.PARALLEL, esg.subgraph(filterN1), esg.subgraph(filterN2)

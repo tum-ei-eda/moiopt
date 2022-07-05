@@ -1,4 +1,3 @@
-from collections import defaultdict
 import exec_timeout
 import ilpsolver
 import schedule_sp_dec
@@ -6,18 +5,25 @@ import schedule_sp
 import networkx as nx
 
 
-def is_sp_graph(G):
+def is_sp_graph_impl(esg):
+    G = esg.view()
     if len(G.nodes) < 3:
         return True
-    spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
+    spType, esg1, esg2 = schedule_sp_dec.decompose_sp_graph(esg)
     if spType == schedule_sp_dec.SPType.INVALID:
         return False
+    G1 = esg1.view()
+    G2 = esg2.view()
     isSP = True
     if len(G1.edges) != 1:
-        isSP &= is_sp_graph(G1)
+        isSP &= is_sp_graph_impl(esg1)
     if len(G2.edges) != 1:
-        isSP &= is_sp_graph(G2)
+        isSP &= is_sp_graph_impl(esg2)
     return isSP
+
+
+def is_sp_graph(G):
+    return is_sp_graph_impl(schedule_sp_dec.EfficientSubgraph(G))
 
 
 class DummyNode:
@@ -25,7 +31,7 @@ class DummyNode:
         self.parent = parent
 
     def __repr__(self):
-        return "Dummy" + (("(" + str(self.parent) + ")") if self.parent else "")
+        return "Dummy" + (("(" + str(self.parent) + ")") if self.parent else str(id(self)))
 
     def __lt__(self, other):
         return id(self) < id(other)
@@ -82,41 +88,43 @@ class SchedOpt:
         G.nodes[sourceNode]["outsize"] = 1
         G.nodes[sinkNode]["outsize"] = 1
 
-        sched = self.solveSubproblem(G)
+        sched = self.solveSubproblem(schedule_sp_dec.EfficientSubgraph(G))
 
         # Remove any dummy nodes.
         return [n for n in sched if not isinstance(n, DummyNode)]
 
-    def solveSubproblem(self, G):
+    def solveSubproblem(self, esg):
+        G = esg.view()
         if len(G.edges) == 1:
             e = list(G.edges)[0]
             return (e[0], e[1])
-        spType, G1, G2 = schedule_sp_dec.decompose_sp_graph(G)
+        spType, esg1, esg2 = schedule_sp_dec.decompose_sp_graph(esg)
         # Try to split into independent problems by considering series composition.
         if spType == schedule_sp_dec.SPType.SERIES:
+            G1 = esg1.view()
+            G2 = esg2.view()
             if len(G1.nodes) == 1:
                 sched1 = list(G1.nodes)
             else:
-                sched1 = self.solveSubproblem(G1)
+                sched1 = self.solveSubproblem(esg1)
             if len(G2.nodes) == 1:
                 sched2 = list(G2.nodes)
             else:
-                sched2 = self.solveSubproblem(G2)
+                sched2 = self.solveSubproblem(esg2)
             return sched1 + sched2[1:]
 
-        if is_sp_graph(G):
+        if is_sp_graph_impl(esg):
             # Solve series-parallel graphs with polynomial time algorithm.
             CG = makeCumGraph(G)
-            return schedule_sp.sp_schedule(CG)[0]
+            return self.solveWithTimeout(CG, lambda g: schedule_sp.sp_schedule(g)[0])
 
         # Solve general graphs with MILP.
-        sched = self.solveILPWithTimeout(G)
-        return sched
+        return self.solveWithTimeout(G, lambda g: self.solveILP(g))
 
-    def solveILPWithTimeout(self, G, timeout=0.5):
+    def solveWithTimeout(self, G, solveFunc, timeout=0.5):
         def inExternalProcess():
             nodesToIds = {node: i for i, node in enumerate(G.nodes)}
-            sched = self.solveILP(G)
+            sched = solveFunc(G)
             return [nodesToIds[node] for node in sched]
 
         idsToNodes = {i: node for i, node in enumerate(G.nodes)}
