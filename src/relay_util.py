@@ -260,10 +260,10 @@ def hasOverlappingInput(call):
 
 def getCallInput(call):
     if isinstance(call.args[0], relay.Constant):
-        if call.op.name in ["add", "take"]:
+        if call.op.name in ["add", "take", "multiply"]:
             return call.args[1]
         else:
-            raise RuntimeError("unexpected call input arg")
+            raise RuntimeError(f"unexpected call input arg for {call.op.name}")
     else:
         return call.args[0]
 
