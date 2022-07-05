@@ -1014,7 +1014,7 @@ class PathDiscovery:
     def discoverBest(self, mod):
         self.discoverAll()
 
-        import tvm.relay.backend.contrib.moiopt.moiopt as moiopt
+        import moiopt
 
         fusedMod = relay.transform.FuseOps()(mod)
         bestSize = self.evaluateSize(fusedMod)

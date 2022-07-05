@@ -34,7 +34,7 @@ def test(ops, expectedSplitTypes, startOp=0, infer=None):
     testedStartType = expectedSplitTypes[min(len(expectedSplitTypes) - 1, infer.count("u"))]
 
     startIndex = endIndex = startOp + 1
-    cfgs = pd.createAllSplitConfigs(n[startIndex])
+    cfgs = pd.createAllSplitConfigs(n[startIndex], pd.MAX_PARTITIONS)
     testedCfg = None
     for cfg in cfgs:
         if cfg.getNumPartitions() == testedNumPart and cfg.splitType == testedStartType:
