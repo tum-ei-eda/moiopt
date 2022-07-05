@@ -361,10 +361,12 @@ class SplitPathPass(relay.ExprMutator):
 
 # Provides a context for MOIOPT.
 class MOIOPTContext:
-    def __init__(self, noFTP, onlyFTP, noRecurse):
+    def __init__(self, noFTP, onlyFTP, noRecurse, maxPartitions):
         self.noFTP = noFTP
         self.onlyFTP = onlyFTP
         self.noRecurse = noRecurse
+        self.firstIter = True
+        self.maxPartitions = maxPartitions
 
     def runAnalysis(self, mod):
         self.analyzer = graph_analyzer.GraphAnalyzer()
@@ -394,8 +396,7 @@ class MOIOPTContext:
             resultMod = self.applyFusedTiling(mod, expr)
             if resultMod != None:
                 # After the transformation, we need a new analysis before trying again.
-                #if self.noRecurse:
-                if True:
+                if self.noRecurse:
                     return resultMod
                 else:
                     return self.transform(resultMod)
@@ -411,11 +412,11 @@ class MOIOPTContext:
         print("targetExpr:", relay_util.exprToStr(targetExpr))
 
         # Find available fusable path.
-        pathDiscovery = pathdiscovery.PathDiscovery(targetExpr, self.analyzer, self.n, self.noFTP, self.onlyFTP)
+        pathDiscovery = pathdiscovery.PathDiscovery(
+            targetExpr, self.analyzer, self.n, self.noFTP, self.onlyFTP, self.maxPartitions
+        )
 
         # Select path configuration.
-        # if not pathDiscovery.discoverMOIOPT():
-        #    return None
         splitPath = pathDiscovery.discoverBest(mod)
         if splitPath == None:
             return None
@@ -423,8 +424,10 @@ class MOIOPTContext:
         print("Split configuration:", splitPath)
 
         with open("splitcfglog.txt", "a") as f:
-            f.write(splitPath.shortDesc() + "\n")
-            f.write("---------------------------------\n")
+            if not self.firstIter:
+                f.write(" + ")
+            self.firstIter = False
+            f.write(splitPath.veryShortDesc())
 
         # Transform the relay graph.
         mod = SplitPathPass(splitPath)(mod)
@@ -444,10 +447,11 @@ class MOIOPTContext:
 # Applies the Memory Optimizing Inter-Operator Tiling (MOIOPT).
 @tvm.ir.transform.module_pass(opt_level=0)
 class MOIOPTPass(relay.ExprMutator):
-    def __init__(self, noFTP=False, onlyFTP=False, noRecurse=False):
+    def __init__(self, noFTP=False, onlyFTP=False, noRecurse=False, maxPartitions=None):
         self.noFTP = noFTP
         self.onlyFTP = onlyFTP
         self.noRecurse = noRecurse
+        self.maxPartitions = maxPartitions
 
     def transform_module(self, mod, ctx):
-        return MOIOPTContext(self.noFTP, self.onlyFTP, self.noRecurse).transform(mod)
+        return MOIOPTContext(self.noFTP, self.onlyFTP, self.noRecurse, self.maxPartitions).transform(mod)

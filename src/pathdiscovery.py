@@ -1,4 +1,5 @@
 from enum import Enum
+import math
 
 from tvm import relay
 
@@ -9,7 +10,7 @@ import graph_analyzer
 from optypes import OpArgType, OpType, getOpArgType, getOpType
 
 
-MAX_PARTITIONS = 16
+MAX_PARTITIONS = 25
 # Describes how an operation is split.
 SplitType = Enum("SplitType", "NOTSPLIT PARTITIONED LOP LIP PARTIAL FTP")
 # Describes the result of split inference. Adjusted means that the inferred from type was changed.
@@ -805,13 +806,26 @@ class SplitPath:
         for cfg in self.postCfgs:
             yield cfg
 
-    def shortDesc(self):
+    def getNumPartStr(self):
         if len(self[0].outSplit.axes) == 2:
             numPart = self[0].outSplit.axes[0].getNumPartitions()
-            numPart = str(numPart) + "x" + str(numPart)
-        else:
-            numPart = str(self.getNumPartitions())
+            return str(numPart) + "x" + str(numPart)
+        return str(self.getNumPartitions())
+
+    def shortDesc(self):
+        numPart = self.getNumPartStr()
         return "_".join([cfg.splitType.name for cfg in self]) + "_" + numPart
+
+    def veryShortDesc(self):
+        numPart = self.getNumPartStr()
+        ty2chr = {
+            SplitType.LOP: "<",
+            SplitType.PARTITIONED: "=",
+            SplitType.LIP: ">",
+            SplitType.PARTIAL: "~",
+            SplitType.FTP: "#",
+        }
+        return "".join([ty2chr[cfg.splitType] for cfg in self]) + numPart
 
     def __repr__(self):
         out = "SplitPath(" + str(self.getNumPartitions()) + ",\n"
@@ -825,7 +839,7 @@ class SplitPath:
 
 
 # Creates SplitConfigs for every reasonable option for splitting the expression.
-def createAllSplitConfigs(expr):
+def createAllSplitConfigs(expr, maxPartitions):
     cfgs = []
 
     opTy = getOpType(expr)
@@ -860,9 +874,9 @@ def createAllSplitConfigs(expr):
                 else:
                     splitType = SplitType.PARTITIONED
 
-            maxPartitions = min(dim, MAX_PARTITIONS)
-            for numPartitions in range(2, maxPartitions + 1):
-                if numPartitions in [6,8,10,12,13,15]:
+            maxPartitionsForOp = min(dim, maxPartitions)
+            for numPartitions in range(2, maxPartitionsForOp + 1):
+                if numPartitions in [6, 8, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23, 24]:
                     continue
                 ranges = getSplitRanges(dim, numPartitions)
                 cfgs.append(SplitConfig(expr, splitType, outSplit=SplitTensor(shape, [SplitAxis(axis, ranges)])))
@@ -870,30 +884,17 @@ def createAllSplitConfigs(expr):
     # Split by two axes, FTP style.
     if opTy in [OpType.ELEMWISE_LINEAR, OpType.ELEMWISE_NONLINEAR, OpType.CONV, OpType.POOL]:
         if len(shape) == 4:
-            if shape[1] >= 2 and shape[2] >= 2:
-                ranges1 = getSplitRanges(shape[1], 2)
-                ranges2 = getSplitRanges(shape[2], 2)
-                cfgs.append(
-                    SplitConfig(
-                        expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
+            for i in range(2, math.floor(math.sqrt(MAX_PARTITIONS)) + 1):
+                if shape[1] >= i and shape[2] >= i and maxPartitions >= (i * i):
+                    ranges1 = getSplitRanges(shape[1], i)
+                    ranges2 = getSplitRanges(shape[2], i)
+                    cfgs.append(
+                        SplitConfig(
+                            expr,
+                            SplitType.FTP,
+                            outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)]),
+                        )
                     )
-                )
-            if shape[1] >= 3 and shape[2] >= 3:
-                ranges1 = getSplitRanges(shape[1], 3)
-                ranges2 = getSplitRanges(shape[2], 3)
-                cfgs.append(
-                    SplitConfig(
-                        expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
-                    )
-                )
-            if shape[1] >= 4 and shape[2] >= 4:
-                ranges1 = getSplitRanges(shape[1], 4)
-                ranges2 = getSplitRanges(shape[2], 4)
-                cfgs.append(
-                    SplitConfig(
-                        expr, SplitType.FTP, outSplit=SplitTensor(shape, [SplitAxis(1, ranges1), SplitAxis(2, ranges2)])
-                    )
-                )
 
     return cfgs
 
@@ -986,7 +987,7 @@ class SplitOpInfo:
 
 
 class PathDiscovery:
-    def __init__(self, startExpr, analyzer, n, noFTP=False, onlyFTP=False):
+    def __init__(self, startExpr, analyzer, n, noFTP=False, onlyFTP=False, maxPartitions=None):
         self.startExpr = startExpr
         self.analyzer = analyzer
         self.n = n
@@ -995,6 +996,7 @@ class PathDiscovery:
         self.noFTP = noFTP
         self.onlyFTP = onlyFTP
         assert not self.noFTP or not self.onlyFTP
+        self.maxPartitions = maxPartitions if maxPartitions != None else MAX_PARTITIONS
 
     def evaluateSize(self, mod):
         analyzer = graph_analyzer.GraphAnalyzer()
@@ -1012,7 +1014,7 @@ class PathDiscovery:
     def discoverBest(self, mod):
         self.discoverAll()
 
-        import moiopt
+        import tvm.relay.backend.contrib.moiopt.moiopt as moiopt
 
         fusedMod = relay.transform.FuseOps()(mod)
         bestSize = self.evaluateSize(fusedMod)
@@ -1040,7 +1042,7 @@ class PathDiscovery:
         return bestPath
 
     def discoverAll(self):
-        baseCfgs = createAllSplitConfigs(self.startExpr)
+        baseCfgs = createAllSplitConfigs(self.startExpr, self.maxPartitions)
         self.workingPaths = [SplitPath(cfg) for cfg in baseCfgs if cfg.inferUp() != InferStatus.INVALID]
 
         for path in self.workingPaths.copy():
@@ -1080,7 +1082,7 @@ class PathDiscovery:
             else:
                 assert len(preds) == 1
                 existingPartitions = self.n.g.out_degree(preds[0])
-            if path.getNumPartitions() > (MAX_PARTITIONS + 1 - existingPartitions):
+            if path.getNumPartitions() > (self.maxPartitions + 1 - existingPartitions):
                 self.splitPaths.remove(path)
 
         # De-duplicate paths. Duplicate paths occur from pruning.
