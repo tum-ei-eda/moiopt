@@ -987,7 +987,7 @@ class SplitOpInfo:
 
 
 class PathDiscovery:
-    def __init__(self, startExpr, analyzer, n, noFTP=False, onlyFTP=False, maxPartitions=None):
+    def __init__(self, startExpr, analyzer, n, noFTP=False, onlyFTP=False, maxPartitions=0):
         self.startExpr = startExpr
         self.analyzer = analyzer
         self.n = n
@@ -996,7 +996,7 @@ class PathDiscovery:
         self.noFTP = noFTP
         self.onlyFTP = onlyFTP
         assert not self.noFTP or not self.onlyFTP
-        self.maxPartitions = maxPartitions if maxPartitions != None else MAX_PARTITIONS
+        self.maxPartitions = maxPartitions if maxPartitions != 0 else MAX_PARTITIONS
 
     def evaluateSize(self, mod):
         analyzer = graph_analyzer.GraphAnalyzer()

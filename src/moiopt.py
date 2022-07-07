@@ -343,7 +343,7 @@ class SplitPathPass(relay.ExprMutator):
                 raise RuntimeError(f"unexpected split type for conv: {splitCfg.splitType}")
         elif n in ["nn.contrib_dense_pack", "nn.dense"]:
             if splitCfg.splitType == SplitType.LOP:
-                if attrs["units"] != None:
+                if attrs["units"] is not None:
                     units = 1
                     for dim in partShape:
                         units *= dim
@@ -447,11 +447,11 @@ class MOIOPTContext:
 # Applies the Memory Optimizing Inter-Operator Tiling (MOIOPT).
 @tvm.ir.transform.module_pass(opt_level=0)
 class MOIOPTPass(relay.ExprMutator):
-    def __init__(self, noFTP=False, onlyFTP=False, noRecurse=False, maxPartitions=None):
+    def __init__(self, noFTP=False, onlyFTP=False, noRecurse=False, maxPartitions=0):
         self.noFTP = noFTP
         self.onlyFTP = onlyFTP
         self.noRecurse = noRecurse
-        self.maxPartitions = maxPartitions
+        self.maxPartitions = int(maxPartitions)
 
     def transform_module(self, mod, ctx):
         return MOIOPTContext(self.noFTP, self.onlyFTP, self.noRecurse, self.maxPartitions).transform(mod)
