@@ -258,6 +258,16 @@ class SplitConfig:
                         newAxes.append(SplitAxis(splitAx.axis, splitAx.ranges.copy()))
                 self.inSplit = SplitTensor(inShape, newAxes)
                 self.wSplit = SplitTensor(wShape, wAxes)
+            elif name == "transpose":
+                inShape = relay_util.getShape(self.expr.args[0])
+                transposeAxes = self.expr.attrs["axes"]
+                if transposeAxes is None:
+                    transposeAxes = list(reversed(range(len(inShape))))
+                axisMapping = {axis: i for i, axis in enumerate(transposeAxes)}
+                newAxes = []
+                for splitAx in self.outSplit.axes:
+                    newAxes.append(SplitAxis(axisMapping[splitAx.axis], splitAx.ranges.copy()))
+                self.inSplit = SplitTensor(inShape, newAxes)
             else:
                 self.inSplit = self.outSplit.clone()
         elif opArgTy == OpArgType.DENSE:
@@ -318,13 +328,32 @@ class SplitConfig:
                 self.inSplit = SplitTensor(outShape, self.outSplit.cloneAxes())
             elif len(inShape) == len(outShape):
                 # relay.reshape(relay.var(shape=))
-                print(inShape, outShape)
-                raise RuntimeError("same shape dim nums")
+                return InferStatus.INVALID
+            elif tuple(dim for dim in inShape if dim != 1) == tuple(dim for dim in outShape if dim != 1):
+                # Just adding or removing ones.
+                nonOneOutDims = []
+                for i, dim in enumerate(outShape):
+                    if dim != 1:
+                        nonOneOutDims.append(i)
+                nonOneInDims = []
+                for i, dim in enumerate(inShape):
+                    if dim != 1:
+                        nonOneInDims.append(i)
+                assert len(nonOneOutDims) == len(nonOneInDims)
+                outDimToInDim = {}
+                for i in range(len(nonOneOutDims)):
+                    outDimToInDim[nonOneOutDims[i]] = nonOneInDims[i]
+                axes = self.outSplit.cloneAxes()
+                for axis in axes:
+                    axis.axis = outDimToInDim[axis.axis]
+                self.inSplit = SplitTensor(inShape, axes)
+            else:
+                return InferStatus.INVALID
             # for splitAx in self.outSplit.axes:
             # for r in splitAx.ranges:
             # np.unravel_index(np.ravel_multi_index(IDX, outShape), inShape)
             # Set overlay shape!
-            self.inSplit = SplitTensor(outShape, self.outSplit.cloneAxes())
+            # self.inSplit = SplitTensor(outShape, self.outSplit.cloneAxes())
         else:
             raise RuntimeError("unhandled op arg type")
 
@@ -384,6 +413,16 @@ class SplitConfig:
                 #         newAxes.append(SplitAxis(splitAx.axis, splitAx.ranges.copy()))
                 # self.outSplit = SplitTensor(outShape, newAxes)
                 pass
+            elif name == "transpose":
+                inShape = relay_util.getShape(self.expr.args[0])
+                transposeAxes = self.expr.attrs["axes"]
+                if transposeAxes is None:
+                    transposeAxes = list(reversed(range(len(inShape))))
+                axisMapping = {i: axis for i, axis in enumerate(transposeAxes)}
+                newAxes = []
+                for splitAx in self.outSplit.axes:
+                    newAxes.append(SplitAxis(axisMapping[splitAx.axis], splitAx.ranges.copy()))
+                self.inSplit = SplitTensor(inShape, newAxes)
             else:
                 self.outSplit = self.inSplit.clone()
         elif opArgTy == OpArgType.DENSE:
@@ -422,8 +461,27 @@ class SplitConfig:
                 # TODO: when converting weights, these might be useful: ravel_multi_index, unravel_index
             elif len(inShape) == len(outShape):
                 # relay.reshape(relay.var(shape=))
-                print(inShape, outShape)
-                raise RuntimeError("same shape dim nums")
+                return InferStatus.INVALID
+            elif tuple(dim for dim in inShape if dim != 1) == tuple(dim for dim in outShape if dim != 1):
+                # Just adding or removing ones.
+                nonOneOutDims = []
+                for i, dim in enumerate(outShape):
+                    if dim != 1:
+                        nonOneOutDims.append(i)
+                nonOneInDims = []
+                for i, dim in enumerate(inShape):
+                    if dim != 1:
+                        nonOneInDims.append(i)
+                assert len(nonOneOutDims) == len(nonOneInDims)
+                inDimToOutDim = {}
+                for i in range(len(nonOneOutDims)):
+                    inDimToOutDim[nonOneInDims[i]] = nonOneOutDims[i]
+                axes = self.inSplit.cloneAxes()
+                for axis in axes:
+                    axis.axis = inDimToOutDim[axis.axis]
+                self.outSplit = SplitTensor(outShape, axes)
+            else:
+                return InferStatus.INVALID
         else:
             raise RuntimeError("unhandled op arg type")
 

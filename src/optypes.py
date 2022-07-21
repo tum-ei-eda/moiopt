@@ -31,6 +31,7 @@ def getOpType(expr):
         "right_shift",  # ???
         "nn.pad",
         "take",
+        "transpose",
     ]:
         return OpType.ELEMWISE_LINEAR
     elif name in ["round", "clip", "nn.relu", "nn.prelu", "tanh", "add", "subtract"]:
@@ -81,9 +82,10 @@ def getOpArgType(expr):
         "nn.avg_pool2d",
         "nn.pad",
         "mean",
+        "transpose",
     ]:
         return OpArgType.TRIVIAL
-    elif name in ["add", "subtract", "multiply", "right_shift", "take"]:
+    elif name in ["add", "subtract", "multiply", "divide", "right_shift", "take"]:
         return OpArgType.SIMPLE
     elif name == "reshape":
         return OpArgType.RESHAPE
