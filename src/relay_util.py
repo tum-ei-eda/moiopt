@@ -92,9 +92,10 @@ class GraphPositionVisitor(relay.ExprVisitor):
 
 # Wrap expressions in this class to compare them between different modules.
 class ExprCmpHelper:
-    def __init__(self, e):
+    def __init__(self, e, cache):
         self.e = e
         self.eTy = self.getTextType()
+        self.cache = cache
 
     def getTextType(self):
         if isinstance(self.e, relay.Call):
@@ -122,17 +123,27 @@ class ExprCmpHelper:
             if len(self.e.args) != len(other.e.args):
                 return False
             for i in range(0, len(self.e.args)):
-                if ExprCmpHelper(self.e.args[i]) != ExprCmpHelper(other.e.args[i]):
+                if not self.cache.eq(self.e.args[i], other.e.args[i]):
                     return False
         return True
 
 
+class ExprCmpCache:
+    @functools.cache
+    def get(self, e):
+        return ExprCmpHelper(e, self)
+
+    @functools.cache
+    def eq(self, e1, e2):
+        return self.get(e1) == self.get(e2)
+
+
 # Searches mod for equivalent expression of exprFromOtherMod.
 def findFromOtherModule(mod, exprFromOtherMod):
-    otherExprHelper = ExprCmpHelper(exprFromOtherMod)
+    cache = ExprCmpCache()
 
     def efficientCompare(e):
-        return ExprCmpHelper(e) == otherExprHelper
+        return cache.eq(e, exprFromOtherMod)
 
     return FindCall().run(mod, efficientCompare)[0]
 
