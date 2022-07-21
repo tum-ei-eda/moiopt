@@ -168,3 +168,13 @@ test(
     ], 3, "<===="
 )
 test(["12x12x5", "conv15", "conv2", "pool", "flatten", "dense10"], 3, "<>")
+
+test(["100", "dense10000", "dense10", ("dense1000", 0), "dense10", ("cat", [2, 4])], 12, "<>")
+test(["100", "dense10000", "dense10", ("dense1000", 0), "dense10", ("dense1000", 0), "dense10", ("cat", [2, 4, 6])], 12, "<>")
+test(["100", "dense1000", ("dense1000", 0), ("cat", [1, 2]), "dense10000", "dense10", ("dense1000", 3), "dense10", ("cat", [5, 7])], 12, "<>")
+test(["100", "dense1000", ("dense1000", 0), ("mult", [1, 2]), "dense10"], 1)
+test(["100", "flatten", "dense10"], 3, "=>")
+test(["2x1000", "reshapestrip", "dense10"], 9, "=>")
+test(["2x1000", "add", "reshapestrip", "dense10"], 9, "==>")
+test(["2x100", "add", "reshapestrip", "nndense1000", "dense10"], 9, "<>")
+test(["2x100", "add", "reshapestrip", "nndense1000", "transpose", "transpose", "dense10"], 12, "<==>")

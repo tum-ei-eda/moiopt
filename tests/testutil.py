@@ -284,9 +284,10 @@ def relayOp(s, prevExpr):
         shape = [1] + [int(dim) for dim in s.split("x")]
         return relay.var("inp", shape=shape, dtype=dtype)
 
-    ty = relay_util.RelayType(prevExpr)
-    prevShape = ty.getShape()
-    dtype = ty.getDType()
+    if not isinstance(prevExpr, list):
+        ty = relay_util.RelayType(prevExpr)
+        prevShape = ty.getShape()
+        dtype = ty.getDType()
     if s.startswith("dense"):
         inSize = prevShape[1]
         outSize = getNum(s[5:])
@@ -301,9 +302,17 @@ def relayOp(s, prevExpr):
         return relay.nn.contrib_dense_pack(
             prevExpr, relay.const(np.zeros((outSize // bSize, inSize, bSize)), dtype), out_dtype=outType
         )
+    elif s.startswith("nndense"):
+        inSize = prevShape[1]
+        outSize = getNum(s[7:])
+        if outSize == None:
+            outSize = inSize
+        return relay.nn.dense(prevExpr, relay.const(np.zeros((outSize, inSize)), dtype), units=outSize)
     elif s == "add":
         return relay.add(prevExpr, relay.const(np.zeros(prevShape), dtype))
     elif s == "mult":
+        if isinstance(prevExpr, list):
+            return relay.multiply(prevExpr[0], prevExpr[1])
         return relay.multiply(prevExpr, relay.const(1.0, dtype))
     elif s == "relu":
         return relay.nn.relu(prevExpr)
@@ -357,6 +366,12 @@ def relayOp(s, prevExpr):
         return relay.reshape(prevExpr, (1, -1))
     elif s == "reshape":
         return relay.reshape(prevExpr, prevShape)
+    elif s == "reshapestrip":
+        return relay.reshape(prevExpr, prevShape[1:])
+    elif s == "reshapeflip":
+        newShape = list(prevShape)
+        newShape[-1], newShape[-2] = newShape[-2], newShape[-1]
+        return relay.reshape(prevExpr, newShape)
     elif s.startswith("cast"):
         size = getNum(s[4:])
         isFloat = getArg(s[4:], "f")
@@ -375,6 +390,13 @@ def relayOp(s, prevExpr):
         return relay.nn.pad(prevExpr, pad_width=((0, 0), (0, 1), (0, 1), (0, 0)))
     elif s == "pad2":
         return relay.nn.pad(prevExpr, pad_width=((0, 0), (2, 2), (2, 2), (0, 0)))
+    elif s.startswith("cat"):
+        axis = getNum(s[3:])
+        if axis == None:
+            axis = 0
+        return relay.concatenate(prevExpr, axis=axis)
+    elif s == "transpose":
+        return relay.transpose(prevExpr)
     else:
         raise RuntimeError("not implemented:", s)
 
@@ -409,12 +431,20 @@ def verifyPath(path, expectedSplitTypes, expectedNumPart):
 
 
 def opsStrToModAndSplitPath(ops):
-    exprs = []
     prevExpr = relayOp(ops[0], None)
-    exprs.append(prevExpr)
-    for op in ops[1:]:
+    exprs = [prevExpr]
+    opIndexToExpr = {0: prevExpr}
+    for i, op in enumerate(ops[1:]):
+        if isinstance(op, tuple):
+            prevIndex = op[1]
+            op = op[0]
+            if isinstance(prevIndex, list):
+                prevExpr = [opIndexToExpr[j] for j in prevIndex]
+            else:
+                prevExpr = opIndexToExpr[prevIndex]
         prevExpr = relayOp(op, prevExpr)
         exprs.append(prevExpr)
+        opIndexToExpr[i + 1] = exprs[-1]
 
     mod = tvm.IRModule.from_expr(exprs[-1])
     mod = relay.transform.InferType()(mod)
