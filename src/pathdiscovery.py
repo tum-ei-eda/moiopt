@@ -1100,6 +1100,11 @@ class PathDiscovery:
         return bestPath
 
     def discoverAll(self):
+        # TODO: this could be supported by emitting multiple split expressions for each arg.
+        startOp = self.analyzer.exprToOp[self.startExpr]
+        if len(list(self.n.g.predecessors(startOp))) > 1:
+            return []
+
         baseCfgs = createAllSplitConfigs(self.startExpr, self.maxPartitions)
         self.workingPaths = [SplitPath(cfg) for cfg in baseCfgs if cfg.inferUp() != InferStatus.INVALID]
 
@@ -1173,6 +1178,11 @@ class PathDiscovery:
         preds = list(self.n.g.predecessors(op))
         if len(preds) != 1 or len(list(self.n.g.successors(preds[0]))) != 1:
             return None
+
+        # TODO: this could be supported by emitting multiple split expressions for each arg.
+        if len(list(self.n.g.predecessors(preds[0]))) > 1:
+            return None
+
         buf = preds[0].getOutputs()[0]
         return self.analyzer.bufToExpr[buf]
 
