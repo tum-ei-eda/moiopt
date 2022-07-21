@@ -344,10 +344,7 @@ class SplitPathPass(relay.ExprMutator):
         elif n in ["nn.contrib_dense_pack", "nn.dense"]:
             if splitCfg.splitType == SplitType.LOP:
                 if attrs["units"] is not None:
-                    units = 1
-                    for dim in partShape:
-                        units *= dim
-                    attrs["units"] = units
+                    attrs["units"] = partShape[1]
         elif n == "nn.pad":
             # Work around inconsistency of argument definitions of nn.pad
             if len(args) > 1:
