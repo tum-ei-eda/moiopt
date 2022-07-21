@@ -1,4 +1,4 @@
-from functools import lru_cache
+import functools
 import networkx as nx
 import schedule_sp_dec
 
@@ -14,7 +14,7 @@ def cost(T, node):
 
 
 # Accumulated pebble cost of a sequence until a node on a tree.
-@lru_cache(maxsize=None)
+@functools.cache
 def accumulated_cost(T, node, sequence):
     prevIndex = sequence.index(node) - 1
     if prevIndex >= 0:
