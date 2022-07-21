@@ -12,10 +12,11 @@ class CriticalChain:
     def __init__(self, sizeLeft):
         self.sizeLeft = sizeLeft
         self.bufList = []
+        self.parent = None
 
     def clone(self):
         cc = CriticalChain(self.sizeLeft)
-        cc.bufList = self.bufList.copy()
+        cc.parent = self
         return cc
 
 
@@ -80,26 +81,32 @@ class MemoryLayout:
 
     # Returns all bufs that could be responsible for the peak memory usage, sorted by size.
     def getBufsByCriticality(self):
+        endOffsetToBufs = defaultdict(list)
+        for buf, offset in self.bufToOffset.items():
+            endOffsetToBufs[offset + buf.size].append(buf)
+
         criticalChains = [CriticalChain(self.getSize())]
-        anythingFound = True
-        while anythingFound:
-            anythingFound = False
+        endOffsetToCC = {self.getSize(): criticalChains[0]}
+        while len(criticalChains) > 0:
             nextChains = []
             for cc in criticalChains:
-                if cc.sizeLeft == 0:
-                    nextChains.append(cc)
-                    continue
-                for buf, offset in self.bufToOffset.items():
-                    if offset + buf.size == cc.sizeLeft:
+                for buf in endOffsetToBufs[cc.sizeLeft]:
+                    endOffset = cc.sizeLeft - buf.size
+                    if endOffset in endOffsetToCC:
+                        endOffsetToCC[endOffset].bufList.append(buf)
+                    else:
                         ncc = cc.clone()
                         ncc.bufList.append(buf)
                         ncc.sizeLeft -= buf.size
+                        endOffsetToCC[endOffset] = ncc
                         nextChains.append(ncc)
-                        anythingFound = True
             criticalChains = nextChains
+
         criticalBufs = set()
-        for cc in criticalChains:
+        cc = endOffsetToCC.get(0, None)
+        while cc is not None:
             criticalBufs.update(cc.bufList)
+            cc = cc.parent
         return sorted(list(criticalBufs), key=lambda b: b.size, reverse=True)
 
     def __repr__(self):
