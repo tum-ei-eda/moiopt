@@ -14,7 +14,7 @@ def cost(T, node):
 
 
 # Accumulated pebble cost of a sequence until a node on a tree.
-@functools.cache
+@functools.lru_cache(maxsize=None)
 def accumulated_cost(T, node, sequence):
     prevIndex = sequence.index(node) - 1
     if prevIndex >= 0:

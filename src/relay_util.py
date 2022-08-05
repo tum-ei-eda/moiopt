@@ -129,11 +129,11 @@ class ExprCmpHelper:
 
 
 class ExprCmpCache:
-    @functools.cache
+    @functools.lru_cache(maxsize=None)
     def get(self, e):
         return ExprCmpHelper(e, self)
 
-    @functools.cache
+    @functools.lru_cache(maxsize=None)
     def eq(self, e1, e2):
         return self.get(e1) == self.get(e2)
 

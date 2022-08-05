@@ -1,4 +1,5 @@
 from ortools.linear_solver import pywraplp
+import os
 
 # Tricks are from:
 # https://download.aimms.com/aimms/download/manuals/AIMMS3OM_IntegerProgrammingTricks.pdf
@@ -16,12 +17,17 @@ class ErrorException(Exception):
     pass
 
 
+def getBestSolverType():
+    if os.environ.get("GUROBI_HOME") is not None:
+        return pywraplp.Solver.GUROBI_MIXED_INTEGER_PROGRAMMING
+    return pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING
+
+
 class ILPSolver:
+    s = pywraplp.Solver("solver", getBestSolverType())
+
     def __init__(self):
-        # solveType = pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING
-        # solveType = pywraplp.Solver.GUROBI_MIXED_INTEGER_PROGRAMMING
-        solveType = pywraplp.Solver.SCIP_MIXED_INTEGER_PROGRAMMING
-        self.s = pywraplp.Solver("solver", solveType)
+        self.s = ILPSolver.s
         self.genId = 0
         self.M = 1e6
         # self.s.EnableOutput()

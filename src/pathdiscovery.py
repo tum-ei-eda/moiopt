@@ -819,7 +819,9 @@ class SplitPath:
             postIdx = self.postCfgs.index(min(checkMinCfgs, key=lambda x: x.getOutSize()))
             self.postCfgs = self.postCfgs[: postIdx + 1]
 
-        return True
+        preSize = self[0].getInSize()
+        postSize = self[-1].getOutSize()
+        return preSize < self.baseCfg.getOutSize() and postSize < self.baseCfg.getOutSize()
 
     def compareOnEqualSize(self, other):
         selfTy = self[0].splitType
@@ -1071,6 +1073,11 @@ class PathDiscovery:
 
     def discoverBest(self, mod):
         self.discoverAll()
+        return self.selectBest(mod)
+
+    def selectBest(self, mod):
+        if len(self.splitPaths) == 0:
+            return None
 
         import moiopt
 
