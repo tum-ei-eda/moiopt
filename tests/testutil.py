@@ -430,7 +430,7 @@ def verifyPath(path, expectedSplitTypes, expectedNumPart):
                         eq(r[0], splitAx.ranges[i - 1][1], "Last cfg cannot have overlaps or gaps between partitions")
 
 
-def opsStrToModAndSplitPath(ops):
+def opsStrToMod(ops):
     prevExpr = relayOp(ops[0], None)
     exprs = [prevExpr]
     opIndexToExpr = {0: prevExpr}
@@ -447,7 +447,11 @@ def opsStrToModAndSplitPath(ops):
         opIndexToExpr[i + 1] = exprs[-1]
 
     mod = tvm.IRModule.from_expr(exprs[-1])
-    mod = relay.transform.InferType()(mod)
+    return relay.transform.InferType()(mod)
+
+
+def opsStrToModAndSplitPath(ops):
+    mod = opsStrToMod(ops)
     analyzer = graph_analyzer.GraphAnalyzer()
     analyzer.run(mod["main"])
     sn = analyzer.makeNet()
