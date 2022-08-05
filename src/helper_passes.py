@@ -19,10 +19,6 @@ class FixReshapesPass(relay.ExprMutator):
         self.reshapeOnlyCalls = []
         self.reshapeInfos = []
 
-        self.parentFuncParam = None
-        self.reshapeFnParam = None
-        self.newShape = None
-
     def transform_function(self, func, mod, ctx):
         return self.visit(func)
 
@@ -31,7 +27,11 @@ class FixReshapesPass(relay.ExprMutator):
             attrName = "relay.reshape_only"
             if attrName in call.op.attrs:
                 if call.op.attrs[attrName] == 1:
-                    self.reshapeOnlyCalls.append(call)
+                    # TODO: handle functions that contains more than one reshape.
+                    if isinstance(call.op.body.args[0], relay.Var):
+                        # TODO: could handle dyn.reshape with more effort.
+                        if call.op.body.op.name == "reshape":
+                            self.reshapeOnlyCalls.append(call)
 
         newArgs = []
         for arg in call.args:
@@ -63,7 +63,7 @@ class FixReshapesPass(relay.ExprMutator):
                 for i, arg in argsFromReshapes:
                     fnParams[i] = newFnParams[i]
                     newArgs[i] = arg.args[0]
-                newFn = relay.Function(fnParams, fnBody, call.op.ret_type, call.op.type_params, call.op.attrs)
+                newFn = relay.function.FunctionWithFields(call.op, fnParams, fnBody)
                 return relay.Call(newFn, newArgs, call.attrs, call.type_args, call.span)
 
         return relay.Call(self.visit(call.op), newArgs, call.attrs, call.type_args, call.span)
