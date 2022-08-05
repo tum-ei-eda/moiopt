@@ -32,14 +32,19 @@ def getOpType(expr):
         "nn.pad",
         "take",
         "transpose",
+        "expand_dims",
     ]:
         return OpType.ELEMWISE_LINEAR
-    elif name in ["round", "clip", "nn.relu", "nn.prelu", "tanh", "add", "subtract"]:
+    elif name in ["round", "clip", "nn.relu", "nn.prelu", "tanh", "sigmoid", "add", "subtract"]:
         return OpType.ELEMWISE_NONLINEAR
     elif name in [
         "nn.softmax",
         "strided_slice",
         "concatenate",
+        "split",
+        "nn.conv2d_transpose",  # TODO: trivial inversion of conv, but CONV optype might need rework
+        "image.resize2d",  # TODO: could be treated as optype POOL, but high arg complexity
+        "nn.depth_to_space",  # TODO: could be treated as optype POOL?
     ]:
         # TODO: concat is splitable and possible target of identity transformation
         return OpType.NONE
@@ -76,6 +81,7 @@ def getOpArgType(expr):
         "cast",
         "fixed_point_multiply",
         "tanh",
+        "sigmoid",
         "nn.relu",
         "nn.prelu",
         "nn.max_pool2d",
@@ -83,6 +89,8 @@ def getOpArgType(expr):
         "nn.pad",
         "mean",
         "transpose",
+        "round",
+        "expand_dims",
     ]:
         return OpArgType.TRIVIAL
     elif name in ["add", "subtract", "multiply", "divide", "right_shift", "take"]:
