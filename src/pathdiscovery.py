@@ -231,14 +231,14 @@ class SplitConfig:
                 self.inSplit = SplitTensor(inShape, newAxes)
             elif name == "mean":
                 meanAxes = self.expr.attrs["axis"]
-                assert len(meanAxes) == 1
-                meanAxis = int(meanAxes[0])
+                meanAxes = [int(ax) for ax in meanAxes]
                 inShape = relay_util.getShape(self.expr.args[0])
                 newAxes = []
                 for splitAx in self.outSplit.axes:
                     newAxis = splitAx.axis
-                    if splitAx.axis >= meanAxis:
-                        newAxis += 1
+                    for meanAxis in meanAxes:
+                        if splitAx.axis >= meanAxis:
+                            newAxis += 1
                     newAxes.append(SplitAxis(newAxis, splitAx.ranges.copy()))
                 self.inSplit = SplitTensor(inShape, newAxes)
             elif name == "take":
@@ -267,6 +267,19 @@ class SplitConfig:
                 newAxes = []
                 for splitAx in self.outSplit.axes:
                     newAxes.append(SplitAxis(axisMapping[splitAx.axis], splitAx.ranges.copy()))
+                self.inSplit = SplitTensor(inShape, newAxes)
+            elif name == "expand_dims":
+                inShape = relay_util.getShape(self.expr.args[0])
+                insertAt = int(self.expr.attrs["axis"])
+                if insertAt < 0:
+                    insertAt = (insertAt + 1) % len(inShape)
+                insertAmount = int(self.expr.attrs["num_newaxis"])
+                newAxes = []
+                for splitAx in self.outSplit.axes:
+                    axis = splitAx.axis
+                    if axis >= (insertAt + insertAmount):
+                        axis -= insertAmount
+                    newAxes.append(SplitAxis(axis, splitAx.ranges.copy()))
                 self.inSplit = SplitTensor(inShape, newAxes)
             else:
                 self.inSplit = self.outSplit.clone()
@@ -386,16 +399,16 @@ class SplitConfig:
                 self.outSplit = SplitTensor(outShape, newAxes)
             elif name == "mean":
                 meanAxes = self.expr.attrs["axis"]
-                assert len(meanAxes) == 1
-                meanAxis = int(meanAxes[0])
+                meanAxes = [int(ax) for ax in meanAxes]
                 outShape = relay_util.getShape(self.expr)
                 newAxes = []
                 for splitAx in self.inSplit.axes:
                     newAxis = splitAx.axis
-                    if splitAx.axis == meanAxis:
-                        return InferStatus.INVALID
-                    elif splitAx.axis > meanAxis:
-                        newAxis -= 1
+                    for meanAxis in meanAxes:
+                        if splitAx.axis == meanAxis:
+                            return InferStatus.INVALID
+                        elif splitAx.axis > meanAxis:
+                            newAxis -= 1
                     newAxes.append(SplitAxis(newAxis, splitAx.ranges.copy()))
                 self.outSplit = SplitTensor(outShape, newAxes)
             elif name == "take":
@@ -414,15 +427,28 @@ class SplitConfig:
                 # self.outSplit = SplitTensor(outShape, newAxes)
                 pass
             elif name == "transpose":
-                inShape = relay_util.getShape(self.expr.args[0])
+                outShape = relay_util.getShape(self.expr)
                 transposeAxes = self.expr.attrs["axes"]
                 if transposeAxes is None:
-                    transposeAxes = list(reversed(range(len(inShape))))
+                    transposeAxes = list(reversed(range(len(outShape))))
                 axisMapping = {i: axis for i, axis in enumerate(transposeAxes)}
                 newAxes = []
-                for splitAx in self.outSplit.axes:
+                for splitAx in self.inSplit.axes:
                     newAxes.append(SplitAxis(axisMapping[splitAx.axis], splitAx.ranges.copy()))
-                self.inSplit = SplitTensor(inShape, newAxes)
+                self.outSplit = SplitTensor(outShape, newAxes)
+            elif name == "expand_dims":
+                outShape = relay_util.getShape(self.expr)
+                insertAmount = int(self.expr.attrs["num_newaxis"])
+                insertAt = int(self.expr.attrs["axis"])
+                if insertAt < 0:
+                    insertAt = (insertAt + 1) % (len(outShape) - insertAmount)
+                newAxes = []
+                for splitAx in self.inSplit.axes:
+                    axis = splitAx.axis
+                    if axis >= insertAt:
+                        axis += insertAmount
+                    newAxes.append(SplitAxis(axis, splitAx.ranges.copy()))
+                self.outSplit = SplitTensor(outShape, newAxes)
             else:
                 self.outSplit = self.inSplit.clone()
         elif opArgTy == OpArgType.DENSE:
