@@ -522,8 +522,8 @@ class SplitConfig:
             widthAx: wShape[self.expr.attrs["kernel_layout"].index("W")],
             heightAx: wShape[self.expr.attrs["kernel_layout"].index("H")],
         }
-        strideWidthIndex = 1  # TODO: verify
-        strideHeightIndex = 0
+        strideWidthIndex = 0
+        strideHeightIndex = 1
         strides = {
             widthAx: int(self.expr.attrs["strides"][strideWidthIndex]),
             heightAx: int(self.expr.attrs["strides"][strideHeightIndex]),
@@ -538,8 +538,8 @@ class SplitConfig:
     def inferPool(self, isUpwards):
         widthAx = self.expr.attrs["layout"].index("W")
         heightAx = self.expr.attrs["layout"].index("H")
-        kernelWidthIndex = 1  # TODO verify
-        kernelHeightIndex = 0
+        kernelWidthIndex = 0
+        kernelHeightIndex = 1
         poolSize = {
             widthAx: int(self.expr.attrs["pool_size"][kernelWidthIndex]),
             heightAx: int(self.expr.attrs["pool_size"][kernelHeightIndex]),
