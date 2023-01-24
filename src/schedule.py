@@ -2,6 +2,7 @@ import exec_timeout
 import ilpsolver
 import schedule_sp_dec
 import schedule_sp
+import schedule_heuristic
 import networkx as nx
 
 
@@ -56,15 +57,17 @@ def makeCumGraph(G):
     endN = {}
     for n in G.nodes:
         endN[n] = DummyNode(n)
-        CG.add_edge(n, endN[n])
         w = G.nodes[n]["w"]
+        CG.add_edge(n, endN[n])
         CG.nodes[n]["cw"] = w
         CG.nodes[endN[n]]["cw"] = -w
+        CG.edges[n, endN[n]]["w"] = 0
     for e in G.edges:
-        CG.add_edge(endN[e[0]], e[1])
         w = G.edges[e]["w"]
+        CG.add_edge(endN[e[0]], e[1])
         CG.nodes[e[0]]["cw"] += w
         CG.nodes[endN[e[1]]]["cw"] -= w
+        CG.edges[endN[e[0]], e[1]]["w"] = w
     return CG
 
 
@@ -116,12 +119,23 @@ class SchedOpt:
         if is_sp_graph_impl(esg):
             # Solve series-parallel graphs with polynomial time algorithm.
             CG = makeCumGraph(G)
-            return self.solveWithTimeout(CG, lambda g: schedule_sp.sp_schedule(g)[0])
+            # return self.solveWithTimeout(CG, lambda g: schedule_sp.sp_schedule(g)[0], lambda: self.solveHeuristic(G))
+            return self.solveWithTimeout(
+                CG,
+                lambda g: schedule_sp.sp_schedule(g)[0],
+                lambda: self.solveWithTimeout(
+                    G,
+                    lambda g: self.solveILP(g),
+                    lambda: self.solveWithTimeout(
+                        G, lambda g: self.solveHeuristic(g), lambda: tuple(nx.topological_sort(G))
+                    ),
+                ),
+            )
 
         # Solve general graphs with MILP.
-        return self.solveWithTimeout(G, lambda g: self.solveILP(g))
+        return self.solveWithTimeout(G, lambda g: self.solveILP(g), lambda: tuple(nx.topological_sort(G)))
 
-    def solveWithTimeout(self, G, solveFunc, timeout=0.5):
+    def solveWithTimeout(self, G, solveFunc, timeoutFunc, timeout=1.5):
         def inExternalProcess():
             nodesToIds = {node: i for i, node in enumerate(G.nodes)}
             sched = solveFunc(G)
@@ -132,7 +146,7 @@ class SchedOpt:
             ids = exec_timeout.exec_timeout(timeout, inExternalProcess)
             return tuple([idsToNodes[id] for id in ids])
         except TimeoutError:
-            return tuple(nx.topological_sort(G))
+            return timeoutFunc()
 
     def solveILP(self, G):
         numNodes = len(G.nodes)
@@ -218,6 +232,10 @@ class SchedOpt:
         for i, node in sorted(nodeOrder, key=lambda x: x[0]):
             sched.append(node)
         return tuple(sched)
+
+    def solveHeuristic(self, G):
+        return schedule_heuristic.schedule(G)
+        return tuple(nx.topological_sort(G))
 
 
 def solve(G):
