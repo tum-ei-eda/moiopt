@@ -337,11 +337,6 @@ class SplitConfig:
             outShape = relay_util.getShape(self.expr)
             if inShape == outShape:
                 self.inSplit = SplitTensor(outShape, self.outSplit.cloneAxes())
-            elif relay_util.isFlatten(self.expr):
-                self.inSplit = SplitTensor(outShape, self.outSplit.cloneAxes())
-            elif len(inShape) == len(outShape):
-                # relay.reshape(relay.var(shape=))
-                return InferStatus.INVALID
             elif tuple(dim for dim in inShape if dim != 1) == tuple(dim for dim in outShape if dim != 1):
                 # Just adding or removing ones.
                 nonOneOutDims = []
@@ -360,6 +355,12 @@ class SplitConfig:
                 for axis in axes:
                     axis.axis = outDimToInDim[axis.axis]
                 self.inSplit = SplitTensor(inShape, axes)
+            elif relay_util.isFlatten(self.expr):
+                return InferStatus.INVALID
+                self.inSplit = SplitTensor(outShape, self.outSplit.cloneAxes())
+            elif len(inShape) == len(outShape):
+                # relay.reshape(relay.var(shape=))
+                return InferStatus.INVALID
             else:
                 return InferStatus.INVALID
             # for splitAx in self.outSplit.axes:
@@ -478,16 +479,6 @@ class SplitConfig:
             outShape = relay_util.getShape(self.expr)
             if inShape == outShape:
                 self.outSplit = SplitTensor(inShape, self.inSplit.cloneAxes())
-            elif relay_util.isFlatten(self.expr):
-                # TODO: this is too complex for now.
-                return InferStatus.INVALID
-                self.outSplit = SplitTensor(
-                    inShape, self.inSplit.cloneAxes()
-                )  ## keep the input shape! TODO: check if used correctly
-                # TODO: when converting weights, these might be useful: ravel_multi_index, unravel_index
-            elif len(inShape) == len(outShape):
-                # relay.reshape(relay.var(shape=))
-                return InferStatus.INVALID
             elif tuple(dim for dim in inShape if dim != 1) == tuple(dim for dim in outShape if dim != 1):
                 # Just adding or removing ones.
                 nonOneOutDims = []
@@ -506,6 +497,16 @@ class SplitConfig:
                 for axis in axes:
                     axis.axis = inDimToOutDim[axis.axis]
                 self.outSplit = SplitTensor(outShape, axes)
+            elif relay_util.isFlatten(self.expr):
+                # TODO: this is too complex for now.
+                return InferStatus.INVALID
+                self.outSplit = SplitTensor(
+                    inShape, self.inSplit.cloneAxes()
+                )  ## keep the input shape! TODO: check if used correctly
+                # TODO: when converting weights, these might be useful: ravel_multi_index, unravel_index
+            elif len(inShape) == len(outShape):
+                # relay.reshape(relay.var(shape=))
+                return InferStatus.INVALID
             else:
                 return InferStatus.INVALID
         else:

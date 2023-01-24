@@ -18,8 +18,8 @@ def getOpType(expr):
     name = expr.op.name
 
     # TODO disallow any flatten ops for now for simplicity.
-    if name == "reshape" and relay_util.isFlatten(expr):
-        return OpType.NONE
+    #if name == "reshape" and relay_util.isFlatten(expr):
+    #    return OpType.NONE
 
     if name in [
         # "add",  # could be supported by other means.
