@@ -633,6 +633,11 @@ class SplitConfig:
                     if len(shape) >= splitAx.axis and shape[splitAx.axis] != 1:
                         assert shape[splitAx.axis] == self.outSplit.shape[splitAx.axis]
                         wSplitAxes.append(splitAx)
+                    elif splitAx.axis == 3 and len(shape) == 1:
+                        # Check for broadcast dimension split.
+                        inShape = relay_util.getShape(self.expr.args[0])
+                        if shape[0] == inShape[3]:
+                            wSplitAxes.append(SplitAxis(0, splitAx.ranges))
                     # Otherwise, the axis is broadcast, so no need to split.
                 return SplitTensor(shape, wSplitAxes)
         elif opArgTy == OpArgType.DWCONV:
