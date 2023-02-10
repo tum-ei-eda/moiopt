@@ -23,6 +23,9 @@ class LayoutOpt:
             squeezeFactor = math.ceil(largestSize / self.ilp.M)
             sz = [math.ceil(s / squeezeFactor) for s in sz]
             scaleFactor *= squeezeFactor
+        elif largestSize * 100 <= self.ilp.M:
+            # Gurobi has an issue when M is much larger than the largest size.
+            self.ilp.M = largestSize * 100
 
         # e_i >= sz_i
         e = []

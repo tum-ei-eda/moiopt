@@ -62,6 +62,7 @@ less = __tc.assertLess
 inst = __tc.assertIsInstance
 raises = __tc.assertRaises
 almosteq = __tc.assertAlmostEqual
+isin = __tc.assertIn
 
 
 def fail(msg):
@@ -308,8 +309,13 @@ def relayOp(s, prevExpr):
         if outSize == None:
             outSize = inSize
         return relay.nn.dense(prevExpr, relay.const(np.zeros((outSize, inSize)), dtype), units=outSize)
-    elif s == "add":
-        return relay.add(prevExpr, relay.const(np.zeros(prevShape), dtype))
+    elif s.startswith("add"):
+        broadcastSize = getArg(s[3:], "bc")
+        if broadcastSize != None:
+            addShape = (broadcastSize,)
+        else:
+            addShape = prevShape
+        return relay.add(prevExpr, relay.const(np.zeros(addShape), dtype))
     elif s == "mult":
         if isinstance(prevExpr, list):
             return relay.multiply(prevExpr[0], prevExpr[1])
@@ -324,6 +330,9 @@ def relayOp(s, prevExpr):
         kSize = getArg(s[4:], "k")
         if kSize == None:
             kSize = 3
+        kSizeRect = getArg(s[4:], "rect")
+        if kSizeRect == None:
+            kSizeRect = kSize
         depthWise = getArg(s[4:], "dw")
         if depthWise != None:
             groups = inSize
@@ -333,7 +342,10 @@ def relayOp(s, prevExpr):
             groups = 1
         pad = getArg(s[4:], "pad")
         if pad != None:
-            padding = [1, 1, 1, 1]
+            if pad == 22:
+                padding = [2, 0, 2, 0]
+            else:
+                padding = [1, 1, 1, 1]
         else:
             padding = [0, 0, 0, 0]
         stride = getArg(s[4:], "stride")
@@ -344,10 +356,10 @@ def relayOp(s, prevExpr):
             outType = "int32"
         return relay.nn.conv2d(
             prevExpr,
-            relay.const(np.zeros((outSize, inSize, kSize, kSize), dtype)),
+            relay.const(np.zeros((outSize, inSize, kSize, kSizeRect), dtype)),
             strides=(stride, stride),
             padding=padding,
-            kernel_size=(kSize, kSize),
+            kernel_size=(kSize, kSizeRect),
             data_layout="NHWC",
             groups=groups,
             out_dtype=outType,
@@ -356,10 +368,16 @@ def relayOp(s, prevExpr):
         size = getNum(s[4:])
         if size == None:
             size = 2
+        rectSize = getArg(s[4:], "rect")
+        if rectSize == None:
+            rectSize = size
         stride = getArg(s[4:], "stride")
         if stride == None:
             stride = size
-        return relay.nn.max_pool2d(prevExpr, pool_size=(size, size), strides=(stride, stride), layout="NHWC")
+            rectStride = rectSize
+        else:
+            rectStride = stride
+        return relay.nn.max_pool2d(prevExpr, pool_size=(size, rectSize), strides=(stride, rectStride), layout="NHWC")
     elif s == "concat":
         return relay.concatenate([prevExpr], 0)
     elif s == "flatten":
@@ -408,9 +426,15 @@ def verifyPath(path, expectedSplitTypes, expectedNumPart):
         eq(cfg.splitType, expectedSplitTypes[i])
 
         expectedIn = 1 if cfg.splitType in [pd.SplitType.LOP, pd.SplitType.PARTIAL] else expectedNumPart
-        eq(cfg.inSplit.getNumPartitions(), expectedIn)
+        if isinstance(expectedIn, list):
+            isin(cfg.inSplit.getNumPartitions(), expectedIn)
+        else:
+            eq(cfg.inSplit.getNumPartitions(), expectedIn)
         expectedOut = 1 if cfg.splitType in [pd.SplitType.LIP, pd.SplitType.PARTIAL] else expectedNumPart
-        eq(cfg.outSplit.getNumPartitions(), expectedOut)
+        if isinstance(expectedOut, list):
+            isin(cfg.outSplit.getNumPartitions(), expectedOut)
+        else:
+            eq(cfg.outSplit.getNumPartitions(), expectedOut)
 
         for splitT in [cfg.inSplit, cfg.outSplit]:
             for splitAx in splitT.axes:

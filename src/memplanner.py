@@ -114,7 +114,7 @@ class MemoryLayout:
         for i, b in enumerate(self.buckets):
             out += "  - Bucket " + str(i) + "\n"
             for buf in b:
-                out += "    - Buf: " + str(buf) + "\n"
+                out += "    - Buf: " + str(buf) + " - Offset: " + str(self.getOffset(buf)) + "\n"
         out += "  ----- sz: " + str(self.getSize())
         return out
 

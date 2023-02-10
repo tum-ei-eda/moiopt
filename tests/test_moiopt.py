@@ -139,10 +139,10 @@ tmp = ReLU()(inp)
 tmp = MaxPooling2D((3, 3), strides=(2, 2))(tmp)
 test(Model(inputs=inp, outputs=tmp), 0.7)
 
-# inp = Input(shape=(151, 151, 3))
-# tmp = Conv2D(filters=64, kernel_size=(1, 1))(inp)
-# tmp = MaxPooling2D((3, 3), strides=(2, 2))(tmp)
-# test(Model(inputs=inp, outputs=tmp), 1)  # some issue with this one?
+inp = Input(shape=(151, 151, 3))
+tmp = Conv2D(filters=64, kernel_size=(1, 1))(inp)
+tmp = MaxPooling2D((3, 3), strides=(2, 2))(tmp)
+test(Model(inputs=inp, outputs=tmp), 1)
 
 inp = Input(shape=(16, 16, 8))
 tmp = ReLU()(inp)

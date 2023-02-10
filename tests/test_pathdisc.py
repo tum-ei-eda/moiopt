@@ -128,6 +128,8 @@ test(["reshape", "conv"], "=>")
 test(["pad", "conv"], "=>")
 test(["conv", "pad"], "<=")
 test(["convstride2", "add"], "<=")
+test(["conv", "pool6rect2"], "<=")
+test(["dense", "add", "relu", "dense", "add", "relu", "dense", "add", "relu"], "<==>")
 
 # FTP.
 test(["add", "conv"], "##")
