@@ -21,3 +21,16 @@ Next, install the python dependencies, for example with virtualenv:
 ## Usage
 
 Run the `MOIOPTPass` in `src/moiopt.py` after all built-in Relay optimization passes. Unfortunately, TVM currently does not provide a hooking point at this location, but an example of a possible modification can be seen here: https://discuss.tvm.apache.org/t/insert-relay-pass-after-optimizations/12664
+
+## Cite this work
+
+This work has been described in the following paper: TODO
+
+```
+@article{stahl2023fused,
+  title={Fused Depthwise Tiling for Memory Optimization in TinyML Deep Neural Network Inference},
+  author={Stahl, Rafael and Mueller-Gritschneder, Daniel and Schlichtmann, Ulf},
+  booktitle={arXiv preprint arXiv:TODO},
+  year={2023}
+}
+```
