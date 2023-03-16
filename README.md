@@ -17,3 +17,7 @@ Next, install the python dependencies, for example with virtualenv:
     . venv/bin/activate
     pip install --upgrade pip
     pip install -r requirements.txt
+
+## Usage
+
+Run the `MOIOPTPass` in `src/moiopt.py` after all built-in Relay optimization passes. Unfortunately, TVM currently does not provide a hooking point at this location, but an example of a possible modification can be seen here: https://discuss.tvm.apache.org/t/insert-relay-pass-after-optimizations/12664
