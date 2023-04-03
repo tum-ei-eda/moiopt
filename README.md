@@ -24,13 +24,13 @@ Run the `MOIOPTPass` in `src/moiopt.py` after all built-in Relay optimization pa
 
 ## Cite this work
 
-This work has been described in the following paper: TODO
+This work has been described in the following paper: https://arxiv.org/abs/2303.17878
 
 ```
 @article{stahl2023fused,
   title={Fused Depthwise Tiling for Memory Optimization in TinyML Deep Neural Network Inference},
   author={Stahl, Rafael and Mueller-Gritschneder, Daniel and Schlichtmann, Ulf},
-  booktitle={arXiv preprint arXiv:TODO},
+  booktitle={arXiv preprint arXiv:2303.17878},
   year={2023}
 }
 ```
